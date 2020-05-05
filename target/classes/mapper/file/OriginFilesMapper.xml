@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.common.file.mapper.OriginFilesMapper">
+
+<select id="getOriginPage" resultType="map">
+		SELECT  * from l_origin_files o where o.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+	          AND o.catalog_id = #{p.deptId}
+	      	</if>
+    </select>
+    
+    <select id="getLabelPicture" resultType="map">
+        <bind name="num_s" value="p.num - 1"></bind>
+        SELECT
+          tp.uuid,
+		  of.current_name as image,
+		  lt.task_id as folder,
+		  d.code as objects
+		FROM
+		  l_task_picture tp
+		  LEFT JOIN l_origin_files of
+		    ON tp.picture_id = of.uuid
+		    AND of.data_status = '1'
+		  LEFT JOIN l_label_task lt
+		    ON tp.label_task_id = lt.uuid
+		    AND lt.data_status = '1'
+	      LEFT JOIN l_task t
+		    ON tp.task_id = t.uuid
+		  LEFT JOIN l_define d
+		    ON t.define_id = d.uuid
+		WHERE tp.data_status = '1'
+		  AND tp.label_task_id = #{p.labelTaskId}
+		ORDER BY tp.uuid
+		LIMIT #{num_s}, #{p.num}
+    </select>
+    
+    <select id="getOriginFilesByTask" parameterType="Map" resultType="com.chinobot.common.file.entity.OriginFiles">
+    	SELECT
+			of.* 
+		FROM
+			l_task_picture tp,
+			l_origin_files of 
+		WHERE
+			tp.data_status = 1 
+			AND tp.task_id = #{taskId}
+			AND tp.label_task_id = #{labelTaskId} 
+			AND tp.picture_id = of.uuid
+    </select>
+</mapper>

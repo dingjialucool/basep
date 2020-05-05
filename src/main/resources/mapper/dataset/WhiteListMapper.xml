@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.dataset.mapper.WhiteListMapper">
+	
+	<!-- 白名单列表 -->
+	<select id="getWhiteList" resultType="com.chinobot.plep.home.dataset.entity.vo.WhiteListVO">
+		SELECT
+			wl.uuid,
+			wl.invalid_time,
+			wl.event_id,
+			ei.business_status AS businessStatus,
+			ei.event_name AS eventName,
+			w.warning_time AS warningTime,
+			w.warning_name AS warningName,
+			w.address AS address,
+			ei.event_level AS eventLevel,
+			pe.pname ,
+			f.flignt_name AS fligntName,
+			ev.file_id AS fileId
+		FROM
+		p_white_list wl 
+		left join	bot_event_info ei on wl.event_id=ei.uuid
+		LEFT JOIN bot_event_warning_info wi ON wi.event_uuid = ei.uuid
+		LEFT JOIN bot_event_warning w ON wi.warning_uuid = w.uuid
+		LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+		LEFT JOIN cle_person pe ON pe.uuid = wo.person_uuid
+		LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+		LEFT JOIN cb_file_bus ev ON ei.uuid = ev.bus_id
+		AND ev.data_status = '1'
+		AND ev.module = 'yjmodule_img'
+		WHERE
+			ei.is_deleted = '0' AND wl.data_status='1'
+		<if test="p.start != null and p.start != ''">
+			and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &gt;= #{p.start}
+		</if>
+		<if test="p.end != null and p.end != ''">
+			and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &lt;= #{p.end}
+		</if>
+           <if test="p.warningName != null and p.warningName != ''">
+           	AND w.warning_name like CONCAT('%',#{p.warningName},'%')
+           </if>
+           <if test="p.address != null and p.address != ''">
+           	AND w.address like CONCAT('%',#{p.address},'%')
+           </if>
+           <if test="p.eventName != null and p.eventName != ''">
+           	AND ei.event_name like CONCAT('%',#{p.eventName},'%')
+           </if>
+           <if test="p.personId != null and p.personId != ''">
+           	AND wo.person_uuid = #{p.personId}
+           </if>
+           <if test="p.flightName != null and p.flightName != ''">
+           	AND f.flignt_name like CONCAT('%',#{p.flightName},'%') 
+           </if>
+           <if test="p.businessStatus != null and p.businessStatus !=''">
+			AND w.business_status in
+			<foreach collection="p.businessStatus" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+           <if test="p.deptId != null and p.deptId != ''">
+           AND ei.host_unit =#{p.deptId}
+           </if>
+           order by w.warning_time DESC,ei.event_level ASC
+	</select>
+
+	<!-- 查看白名单 -->
+	<select id="showWhite" resultType="map">
+		SELECT
+			DATE_FORMAT(
+				wa.create_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS warningTime,
+			wa.address,
+			wa.version,
+			s.`code` AS sceneType,
+			e.`code` AS earlyType,
+			CONCAT(wa.accuracy, '%') AS accuracy,
+			e.`name` AS sceneName,
+			wa.uuid AS waId,
+			wa.point_id,
+			wa.longitude,
+			wa.latitude,
+			w.invalid_time AS invalidTime,
+			wa.accuracy,
+			pe.pname,
+			w.operate_time AS operateTime,
+			w.uuid
+		FROM
+			p_white_list w
+		LEFT JOIN p_event_main em ON w.event_id = em.uuid
+		LEFT JOIN p_warning_info wa ON wa.uuid = em.warning_id
+		LEFT JOIN p_scene s ON s.`code` = em.scene_type
+		LEFT JOIN p_scene e ON e.parent_id = s.uuid
+		LEFT JOIN cle_person pe ON pe.uuid = w.operate_by
+		AND e.`code` = em.early_type
+		WHERE
+			w.data_status = '1'
+		AND s.data_status = '1'
+		AND e.data_status = '1'
+		AND pe.data_status = '1'
+		AND w.uuid = #{uuid}
+		
+	</select>
+	
+	<!-- 过滤预警列表 -->
+	<select id="getFilterList" resultType="com.chinobot.plep.home.dataset.entity.vo.FilterWarningVO">
+		SELECT
+            w.uuid,
+            w.warning_time AS warningTime,
+            w.warning_name AS warningName,
+            w.address AS address,
+            u.ename,
+            f.flignt_name AS fligntName,
+            w.accuracy,
+            w.business_status AS businessStatus,
+            pe.pname AS pname,
+            r.tips,
+            ev.file_id as fileId
+        FROM
+            bot_event_warning w
+            LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+            left join cle_person pe on pe.uuid = wo.person_uuid
+            LEFT JOIN bot_prospect_flight f ON wo.flight_uuid =f.uuid
+            LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+            LEFT JOIN cb_file_bus ev ON w.uuid=ev.bus_id and ev.module = 'warning_img' and ev.data_status = '1'
+            left join p_rule r on r.uuid=w.filter_rule and w.business_status='2'
+            where  w.is_deleted = '0' and w.business_status in ('2','3') and w.filter_remove='0'
+            <if test="p.start != null and p.start != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &gt;= #{p.start}
+			</if>
+			<if test="p.end != null and p.end != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &lt;= #{p.end}
+			</if>
+            <if test="p.warningName != null and p.warningName != ''">
+            AND w.warning_name like CONCAT('%',#{p.warningName},'%')
+            </if>
+            <if test="p.uavId != null and p.uavId != ''">
+            AND u.uuid = #{p.uavId}
+            </if>
+            <if test="p.personId != null and p.personId != ''">
+            AND wo.person_uuid = #{p.personId}
+            </if>
+            <if test="p.flightName != null and p.flightName != ''">
+            AND f.flignt_name like CONCAT('%',#{p.flightName},'%') 
+            </if>
+            <if test="p.acStart != null and p.acStart != ''">
+				and w.accuracy &gt;= #{p.acStart}
+			</if>
+			<if test="p.acEnd != null and p.acEnd != ''">
+				and w.accuracy &lt;= #{p.acEnd}
+			</if>
+            <if test="p.businessStatus != null and p.businessStatus !=''">
+				AND w.business_status = #{p.businessStatus}
+			</if>
+            order by w.warning_time desc
+
+	</select>
+	
+	<!-- 查看过滤预警 -->
+	<select id="showFilterWarn" resultType="map">
+		SELECT
+			DATE_FORMAT(
+				em.create_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS warningTime,
+			em.address,
+			em.version,
+			CONCAT(em.accuracy, '%') AS accuracy,
+			s.`code` AS sceneType,
+			e.`code` AS earlyType,
+			em.latitude,
+			em.longitude,
+			em.uuid AS emId,
+			em.point_id,
+			r.tips,
+			pe.pname
+		FROM
+			p_warning_info em
+		LEFT JOIN p_rule r ON r.uuid = em.filter_rule
+		LEFT JOIN cle_person pe ON r.create_by = pe.uuid
+		LEFT JOIN p_scene s ON s.`code` = em.scene_type
+		LEFT JOIN p_scene e ON e.parent_id = s.uuid
+		AND e.`code` = em.early_type
+		WHERE
+			s.data_status = '1'
+		AND e.data_status = '1'
+		AND em.uuid = #{uuid}
+	</select>
+	<select id="getFilterWhiteIds" resultType="String">
+	SELECT
+		GROUP_CONCAT(wl.uuid)
+	FROM
+		p_white_list wl 
+	left join p_event_main em on em.uuid=wl.event_id
+	left join p_warning_info wi on em.warning_id= wi.uuid
+	WHERE
+		wl.data_status = '1' 
+		AND wl.invalid_time &gt; now() 
+		<if test="info.pointId != null and info.pointId != ''">
+			and em.point_id=#{info.pointId}
+		</if>
+		<if test="info.pathId != null and info.pathId != ''">
+		and em.path_id=#{info.pathId}
+		</if>
+		and #{info.longitudeN} &gt;= wi.longitude_n - #{param.lnglat}
+		and #{info.longitudeN} &lt;= wi.longitude_n + #{param.lnglat}
+		and #{info.latitudeN} &gt;= wi.latitude_n - #{param.lnglat}
+		and #{info.latitudeN} &lt;= wi.latitude_n + #{param.lnglat}
+		and #{info.labelXN} &gt;= wi.label_x_n - #{param.laberXy}
+		and #{info.labelXN} &lt;= wi.label_x_n + #{param.laberXy}
+		and #{info.labelYN} &gt;= wi.label_y_n - #{param.laberXy}
+		and #{info.labelYN} &lt;= wi.label_y_n + #{param.laberXy}
+		and #{info.labelWN} &gt;= wi.label_w_n - #{param.labelWh}
+		and #{info.labelWN} &lt;= wi.label_w_n + #{param.labelWh}
+		and #{info.labelHN} &gt;= wi.label_h_n - #{param.labelWh}
+		and #{info.labelHN} &lt;= wi.label_h_n + #{param.labelWh}
+	
+	</select>
+	
+	<!-- 获取当前部门及子部门的所有飞行员 -->
+	<select id="getFlyPersons" resultType="map">
+		SELECT
+			ud.fly_person AS flyPersonId,
+			p.pname
+		FROM
+			p_uav_dispatch ud
+		LEFT JOIN cle_person p ON p.uuid = ud.fly_person
+		left join cle_dept d  on d.uuid = ud.dept_id
+		<if test="p.deptId != null and p.deptId != ''">
+		left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if>
+		WHERE
+			ud.data_status = '1'
+		AND p.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+            AND d.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+		GROUP BY
+			ud.fly_person,
+			p.pname
+		ORDER BY pname ASC
+	
+	</select>
+	
+	<select id="getFilterWhiteIdsNew" resultType="String">
+	SELECT
+		GROUP_CONCAT(wl.uuid)
+	FROM
+		p_white_list wl 
+	left join bot_event_info ei on ei.uuid=wl.event_id
+	left join bot_event_warning_info wi on wi.event_uuid=ei.uuid and wi.is_deleted=0
+	left join bot_event_warning ew on wi.warning_uuid=ew.uuid
+	left join bot_prospect_flight_work fw on fw.uuid=ew.flight_task_uuid
+	left join bot_prospect_flight_work fw2 on fw2.uuid=#{warning.flightTaskUuid}
+	WHERE
+		wl.data_status = '1' 
+		and fw.flight_uuid=fw2.flight_uuid
+		and ew.task_uuid=#{warning.taskUuid}
+		AND wl.invalid_time &gt; now() 
+		and #{warning.longitude} &gt;= ew.longitude - #{param.lnglat}
+		and #{warning.longitude} &lt;= ew.longitude + #{param.lnglat}
+		and #{warning.latitude} &gt;= ew.latitude - #{param.lnglat}
+		and #{warning.latitude} &lt;= ew.latitude + #{param.lnglat}
+		and #{warning.coordinateX} &gt;= ew.coordinate_x - #{param.laberXy}
+		and #{warning.coordinateX} &lt;= ew.coordinate_x + #{param.laberXy}
+		and #{warning.coordinateY} &gt;= ew.coordinate_y - #{param.laberXy}
+		and #{warning.coordinateY} &lt;= ew.coordinate_y + #{param.laberXy}
+		and #{warning.indiciaW} &gt;= ew.indicia_w - #{param.labelWh}
+		and #{warning.indiciaW} &lt;= ew.indicia_w + #{param.labelWh}
+		and #{warning.indiciaH} &gt;= ew.indicia_h - #{param.labelWh}
+		and #{warning.indiciaH} &lt;= ew.indicia_h + #{param.labelWh}
+	
+	</select>
+	
+</mapper>

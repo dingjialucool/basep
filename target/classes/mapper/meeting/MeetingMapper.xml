@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.meeting.mapper.MeetingMapper">
+	<resultMap type="com.chinobot.plep.home.meeting.entity.vo.MeetingDetailVO" id="meetingDetailMap">
+		<id column="uuid" property="uuid"/>
+		<result column="meeting_name" property="meetingName"/>
+		<result column="remark" property="remark"/>
+		<result column="pname" property="pname"/>
+		<result column="puuid" property="puuid"/>
+		<result column="house_num" property="houseNum"/>
+		<result column="promot_time" property="promotTime"/>
+		<result column="meetingLatitude" property="meetingLatitude"/>
+		<result column="meetingLongitude" property="meetingLongitude"/>
+		<result column="address" property="address"/>
+		<collection property="person" ofType="com.chinobot.plep.home.meeting.entity.vo.PersonVo">
+			<id column="user_id" property="uuid"/>
+			<result column="user_name" property="pname"/>
+			<result column="open_id" property="openId"/>
+			<result column="file_id" property="fileId"/>
+		</collection>
+		<collection property="uavs" ofType="com.chinobot.plep.home.meeting.entity.vo.MeetingUavVO">
+			<id column="uav_id" property="uuid"/>
+			<result column="ename" property="ename"/>
+			<result column="ecode" property="ecode"/>
+			<result column="run_status" property="runStatus"/>
+			<result column="longitude" property="longitude"/>
+			<result column="latitude" property="latitude"/>
+			<result column="uav_file_id" property="fileId"/>
+		</collection>
+	</resultMap>
+	<select id="pageMeetingByUserId" resultType="com.chinobot.plep.home.meeting.entity.vo.MeetingVO">
+		SELECT
+			m.uuid,
+			m.meeting_name,
+			m.remark,
+			m.house_num,
+			m.promot_time,
+			p.pname,
+			mp.user_id,
+			m.is_closed,
+			mp.is_read,
+			COUNT(DISTINCT mp2.uuid) person_num
+		FROM
+			p_meeting_person mp
+			LEFT JOIN p_meeting m ON m.data_status = '1' 
+			AND m.uuid = mp.meeting_id
+			LEFT JOIN cle_person p ON p.uuid = m.promoter 
+			AND p.data_status = '1' 
+			left join p_meeting_person mp2 on mp2.meeting_id=mp.meeting_id and mp2.data_status='1'
+		WHERE
+			mp.data_status = '1' and m.is_closed=0
+			<if test="p.userId != null and p.userId != ''">
+			AND mp.user_id=#{p.userId}
+			</if>
+			<if test="p.onlyToday">
+			AND DATE_FORMAT( m.promot_time, '%Y-%m-%d' ) = DATE_FORMAT( now( ), '%Y-%m-%d' )
+			</if>
+			<if test="p.unread">
+			AND mp.is_read=0
+			</if>
+			GROUP BY m.uuid,
+			m.meeting_name,
+			m.remark,
+			m.house_num,
+			m.promot_time,
+			p.pname,
+			mp.user_id,
+			m.is_closed,
+			mp.is_read
+			ORDER BY m.promot_time DESC
+	</select>
+	<select id="countUnReadMeeting" resultType="Long">
+	SELECT
+	COUNT(DISTINCT mp.meeting_id)
+FROM
+	p_meeting_person mp 
+	LEFT JOIN p_meeting m ON m.data_status = '1' 
+	AND m.uuid = mp.meeting_id
+WHERE
+	mp.data_status = '1'
+	and mp.is_read=0
+	and m.is_closed=0
+	AND mp.user_id=#{userId}
+	</select>
+	
+	<select id="meetingDetailById" resultMap="meetingDetailMap">
+	SELECT
+		m.uuid, m.meeting_name, m.remark, m.house_num,m.promot_time,p1.pname,p1.uuid puuid,m.latitude AS meetingLatitude,
+				m.longitude AS meetingLongitude,
+				m.address,
+		mp.user_id, p2.pname user_name, p2.open_id, fb.file_id,
+		mu.uav_id, u.ename, u.uuid AS ecode, uo.longitude, uo.latitude,uo.run_status, fb2.file_id uav_file_id
+	FROM
+		p_meeting m
+		LEFT JOIN p_meeting_person mp ON mp.data_status = '1'
+		AND mp.meeting_id = m.uuid
+		LEFT JOIN p_meeting_uav mu ON mu.data_status='1'
+		AND mu.meeting_id=m.uuid
+		LEFT JOIN cle_person p1 ON p1.uuid=m.promoter
+		LEFT JOIN cle_person p2 ON p2.uuid=mp.user_id
+		LEFT JOIN cb_file_bus fb ON fb.data_status='1' AND fb.module='person_face' AND fb.bus_id=p2.uuid
+		LEFT JOIN bot_resource_uav u ON u.uuid=mu.uav_id
+		LEFT JOIN p_uav_online uo ON uo.uav_code=u.uuid
+		LEFT JOIN cb_file_bus fb2 ON u.uuid = fb2.bus_id
+	AND fb2.sort = '1'
+	AND fb2.module = 'uav_img'
+		where m.uuid=#{uuid}
+	</select>
+	<select id="meetingDetailByRoomNum" resultMap="meetingDetailMap">
+	SELECT
+		m.uuid, m.meeting_name, m.remark, m.house_num,m.promot_time,p1.pname,p1.uuid puuid,m.latitude AS meetingLatitude,
+				m.longitude AS meetingLongitude,
+				m.address,
+		mp.user_id, p2.pname user_name, p2.open_id, fb.file_id,
+		mu.uav_id, u.ename, u.ecode, uo.longitude, uo.latitude,uo.run_status, fb2.file_id uav_file_id
+	FROM
+		p_meeting m
+		LEFT JOIN p_meeting_person mp ON mp.data_status = '1' 
+		AND mp.meeting_id = m.uuid
+		left join p_meeting_uav mu on mu.data_status='1'
+		and mu.meeting_id=m.uuid
+		left join cle_person p1 on p1.uuid=m.promoter
+		left join cle_person p2 on p2.uuid=mp.user_id
+		left join cb_file_bus fb on fb.data_status='1' and fb.module='person_face' and fb.bus_id=p2.uuid
+		left join cle_uav u on u.uuid=mu.uav_id
+		left join p_uav_online uo on uo.uav_code=u.ecode
+		LEFT JOIN cb_file_bus fb2 ON u.uuid = fb2.bus_id 
+	AND fb2.sort = '1' 
+	AND fb2.module = 'equipment_album'
+		where m.house_num=#{houseNum}
+	</select>
+	<update id="kickOutUser" >
+	UPDATE p_meeting_person mp 
+	SET mp.data_status = '0' 
+	WHERE
+		mp.user_id = #{p.userId}
+		AND mp.meeting_id IN ( SELECT m.uuid FROM p_meeting m WHERE m.data_status = '1' AND m.house_num = #{p.room} )
+	</update>
+	<update id="kickOutUav">
+	UPDATE p_meeting_uav mp 
+SET mp.data_status = '0' 
+WHERE
+	mp.uav_id = #{p.uavId} 
+	AND mp.meeting_id IN ( SELECT m.uuid FROM p_meeting m WHERE m.data_status = '1' AND m.house_num = #{p.room} )
+	</update>
+	<select id="meetingPersonByUserIdAndRoom" resultType="com.chinobot.plep.home.meeting.entity.MeetingPerson">
+	SELECT * from p_meeting_person mp 
+	WHERE
+		mp.data_status='1' and mp.user_id = #{p.userId}
+		AND mp.meeting_id IN ( SELECT m.uuid FROM p_meeting m WHERE m.data_status = '1' AND m.house_num = #{p.room} )
+	</select>
+	<select id="getUavs" resultType="com.chinobot.plep.home.meeting.entity.vo.MeetingUavVO">
+	SELECT
+	u.uuid, u.ename, u.ecode, uo.run_status, uo.longitude, uo.latitude, fb.file_id
+FROM
+	cle_uav u
+	LEFT JOIN p_uav_online uo ON uo.uav_code = u.ecode
+	LEFT JOIN cb_file_bus fb ON u.uuid = fb.bus_id 
+	AND fb.sort = '1' 
+	AND fb.module = 'equipment_album'
+	left join cle_dept d1 on d1.uuid=#{deptId}
+	left join cle_dept d2 on d2.data_status='1' and d2.uuid=u.dept_id
+	where u.etype='1' and u.data_status = '1' and d2.dept_code LIKE CONCAT( d1.dept_code, '%' ) 
+	</select>
+	<select id="meetingUavVOById" resultType="com.chinobot.plep.home.meeting.entity.vo.MeetingUavVO">
+	SELECT
+	u.uuid, u.ename, u.ecode, uo.run_status, uo.longitude, uo.latitude, fb.file_id
+FROM
+	cle_uav u
+	LEFT JOIN p_uav_online uo ON uo.uav_code = u.ecode
+	LEFT JOIN cb_file_bus fb ON u.uuid = fb.bus_id 
+	AND fb.sort = '1' 
+	AND fb.module = 'equipment_album'
+	where u.uuid=#{uuid}
+	</select>
+	<select id="getReUavs"
+			resultType="com.chinobot.plep.home.meeting.entity.vo.MeetingUavVO">
+	SELECT
+	  u.uuid,
+	  u.ename,
+	  u.uuid AS ecode,
+	  uo.run_status,
+	  uo.longitude,
+	  uo.latitude,
+	  fb.file_id
+	FROM
+	  bot_resource_uav u
+	  LEFT JOIN p_uav_online uo
+		ON uo.uav_code = u.uuid
+	  LEFT JOIN cb_file_bus fb
+		ON u.uuid = fb.bus_id
+		AND fb.sort = '1'
+		AND fb.module = 'uav_img'
+	<if test="deptId != null and deptId != ''">
+		LEFT JOIN cle_dept d1
+		ON d1.uuid = #{deptId}
+		AND d1.data_status = '1'
+	</if>
+	 WHERE u.is_deleted = '0'
+	<if test="deptId != null and deptId != ''">
+	  	AND d1.dept_code LIKE CONCAT(u.dept_cascade_code, '%')
+  	</if>
+	</select>
+</mapper>

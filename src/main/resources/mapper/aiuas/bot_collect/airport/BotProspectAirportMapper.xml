@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.airport.mapper.BotProspectAirportMapper">
+
+	<resultMap type="com.chinobot.aiuas.bot_collect.airport.entity.dto.AirportGeographyDTO" id="airportMap">
+		<association  property="airportDTO"   javaType="com.chinobot.aiuas.bot_collect.airport.entity.dto.AirportDTO">
+			<id column="uuid" property="uuid"/>
+			<result column="airportName" property="airportName"/>
+			<result column="address" property="address"/>
+			<result column="addressAreaCode" property="addressAreaCode"/>
+		</association>
+		<association property="geography" javaType="com.chinobot.aiuas.bot_collect.info.entity.dto.GeographyDTO">
+			<id column="geographyId" property="geographyId"/>
+			<result column="lat" property="lat"/>
+			<result column="lng" property="lng"/>
+			<result column="lnglats" property="lnglats"/>
+		</association>
+	</resultMap>
+
+	<!--查询机场  -->
+	<select id="selectAirport" resultType="com.chinobot.aiuas.bot_collect.airport.entity.vo.AirportVO">
+		SELECT
+			air.uuid,
+			air.airport_name AS airportName,
+			air.address,
+			go.`name` AS govAreaName,
+			IFNULL(s.uavNum, 0) AS uavNum
+		FROM
+			bot_prospect_airport air
+		LEFT JOIN p_gov_area go ON go.`code` = air.address_area_code
+		LEFT JOIN (
+			SELECT
+				a.uuid,
+				COUNT(au.uuid) AS uavNum
+			FROM
+				bot_prospect_airport a
+			LEFT JOIN bot_prospect_airport_uav au ON au.airport_uuid = a.uuid
+			WHERE
+				au.is_deleted = '0'
+			GROUP BY
+				a.uuid
+		) s ON s.uuid = air.uuid
+		WHERE
+			air.is_deleted = '0'
+		order by air.create_time desc
+	
+	</select>
+
+	<!-- 机场回显 -->
+	<select id="getAirport" resultMap="airportMap">
+		SELECT
+			air.uuid,
+			air.airport_name AS airportName,
+			air.address,
+			air.address_area_code AS addressAreaCode,
+			geo.lat,
+			geo.lng,
+			geo.uuid AS geographyId,
+			geo.lnglats
+		FROM
+			bot_prospect_airport air
+		LEFT JOIN bot_collect_geography geo ON geo.busi_id = air.uuid
+		AND geo.busi_type = 'bot_prospect_airport' AND geo.is_deleted = '0'
+		WHERE   air.uuid = #{airportId}
+	
+	</select>
+	
+	<!-- 无人机分页 -->
+	<select id="getUavList" resultType="com.chinobot.aiuas.bot_collect.airport.entity.vo.UavOfAirportVO">
+		SELECT
+			uav.uuid as airportAndUavId,
+			uav.ename,
+			uav.serial_number AS serialNumber,
+			type.type,
+			type.module_name AS moduleName,
+			type.max_fly_time_min AS maxFlyTimeMin,
+			bu.file_id AS fileId
+		FROM
+			bot_resource_uav uav
+		LEFT JOIN bot_resource_uav_type type ON uav.uav_type_uuid = type.uuid
+		LEFT JOIN cb_file_bus bu ON bu.bus_id = uav.uuid and bu.data_status = '1'
+		AND bu.module = 'uav_img'
+		WHERE
+			uav.is_deleted = '0'
+		AND uav.uuid NOT IN (
+			SELECT
+				uav_uuid
+			FROM
+				bot_prospect_airport_uav
+			WHERE
+				is_deleted = '0'
+		)
+	</select>
+	
+	<!-- 机场下的无人机分页 -->
+	<select id="getUavOfAirportList" resultType="com.chinobot.aiuas.bot_collect.airport.entity.vo.UavOfAirportVO">
+		SELECT
+			au.uuid as airportAndUavId,
+			uav.ename,
+			uav.serial_number AS serialNumber,
+			type.type,
+			type.module_name AS moduleName,
+			type.max_fly_time_min AS maxFlyTimeMin,
+			bu.file_id AS fileId
+		FROM
+			bot_prospect_airport air
+		LEFT JOIN bot_prospect_airport_uav au ON au.airport_uuid = air.uuid
+		LEFT JOIN bot_resource_uav uav ON au.uav_uuid = uav.uuid
+		AND uav.is_deleted = '0'
+		LEFT JOIN bot_resource_uav_type type ON uav.uav_type_uuid = type.uuid
+		LEFT JOIN cb_file_bus bu ON bu.bus_id = uav.uuid and bu.data_status = '1'
+		AND bu.module = 'uav_img'
+		where  au.is_deleted = '0' AND air.uuid = #{p.airportId}
+	</select>
+    <select id="getAirportUavPersonVo"
+            resultType="com.chinobot.aiuas.bot_collect.airport.entity.vo.AirportUavPersonVo">
+		SELECT
+		  CONCAT(a.uuid, u.uuid, p.uuid) AS id,
+		  u.uuid AS uavUuid,
+		  u.ename AS uavName,
+		  p.uuid AS personUuid,
+		  p.pname AS personName,
+		  a.uuid AS airportUuid,
+		  a.airport_name AS airportName
+		FROM
+		  bot_resource_uav u
+		  LEFT JOIN cle_person p
+			ON u.person_uuid = p.uuid
+		  LEFT JOIN bot_prospect_airport_uav au
+			ON u.uuid = au.uav_uuid
+		  LEFT JOIN bot_prospect_airport a
+			ON a.uuid = au.airport_uuid
+		WHERE u.is_deleted = '0'
+		  AND p.data_status = '1'
+		  AND au.is_deleted = '0'
+		  AND a.is_deleted = '0'
+	</select>
+
+</mapper>

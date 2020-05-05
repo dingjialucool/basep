@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.algorithm.mapper.AlgorithmInfoMapper">
+
+	<resultMap type="com.chinobot.aiuas.bot_collect.algorithm.entity.vo.AlgorithmOfAllVo" id="getAlgorithmById">
+	
+		<id column="uuid" property="uuid"/>
+		<result column="algorithmName" property="algorithmName"/>
+		<result column="algorithmDesc" property="algorithmDesc"/>
+		<result column="algorithmVersion" property="algorithmVersion"/>
+		<result column="algorithmicThinking" property="algorithmicThinking"/>
+		<result column="designer" property="designer"/>
+		<result column="designTime" property="designTime"/>
+		<result column="numberStandard" property="numberStandard"/>
+		<result column="operationStandard" property="operationStandard"/>
+		<association property="approveVo" javaType="com.chinobot.aiuas.bot_collect.algorithm.entity.vo.ApproveVo">
+			<result column="personName" property="personName"/>
+			<result column="approveTime" property="approveTime"/>
+			<result column="approvalIdea" property="approvalIdea"/>
+		</association>
+		<collection property="taskVo" ofType="com.chinobot.aiuas.bot_collect.algorithm.entity.vo.AlgorithmTaskVo">
+			<id column="taskId" property="taskId"/>
+			<result column="taskName" property="taskName"/>
+			<result column="sceneName" property="sceneName"/>
+			<result column="domainName" property="domainName"/>
+			<result column="taskFileId" property="taskFileId"/>
+		</collection>
+	
+	</resultMap>
+
+
+	<select id="getDomainTaskTree" resultType="com.chinobot.aiuas.bot_collect.task.entity.vo.DomainSceneVo">
+		SELECT
+			d.uuid,
+			d.d_name AS `name`,
+			d.parent_uuid AS parentId,
+			'domain' AS `type`
+		FROM
+			bot_collect_domain d
+		LEFT JOIN (
+			SELECT
+				d.uuid,
+				GROUP_CONCAT(DISTINCT t.uuid) AS taskId
+			FROM
+				bot_collect_domain d
+			LEFT JOIN bot_collect_scene s ON s.domain_uuid = d.uuid
+			LEFT JOIN bot_collect_task t ON t.scene_uuid = s.uuid
+			WHERE
+				d.is_deleted = '0'
+			AND s.is_deleted = '0'
+			AND t.is_deleted = '0'
+			AND t.uuid NOT IN (
+				SELECT
+					bat.collect_task_uuid
+				FROM
+					bot_algorithm_task bat
+				WHERE
+					bat.is_deleted = '0'
+			)
+			GROUP BY
+				d.uuid
+		) a ON a.uuid = d.uuid
+		WHERE
+			d.is_deleted = '0'
+		AND a.taskId IS NOT NULL
+		AND a.taskId != ''
+		UNION ALL
+			SELECT
+				s.uuid,
+				s.s_name AS `name`,
+				s.domain_uuid AS parentId,
+				'scene' AS `type`
+			FROM
+				bot_collect_scene s
+			LEFT JOIN (
+				SELECT
+					s.uuid,
+					GROUP_CONCAT(DISTINCT t.uuid) AS taskId
+				FROM
+					bot_collect_scene s
+				LEFT JOIN bot_collect_task t ON t.scene_uuid = s.uuid
+				WHERE
+					s.is_deleted = '0'
+				AND t.is_deleted = '0'
+				AND t.uuid NOT IN (
+					SELECT
+						bat.collect_task_uuid
+					FROM
+						bot_algorithm_task bat
+					WHERE
+						bat.is_deleted = '0'
+				)
+				GROUP BY
+					s.uuid
+			) b ON b.uuid = s.uuid
+			WHERE
+				s.is_deleted = '0'
+			AND b.taskId IS NOT NULL
+			AND b.taskId != ''
+			UNION ALL
+				SELECT
+					t.uuid,
+					t.t_name AS `name`,
+					t.scene_uuid AS parentId,
+					'task' AS `type`
+				FROM
+					bot_collect_task t
+				WHERE
+					t.is_deleted = '0'
+				AND t.uuid NOT IN (
+					SELECT
+						bat.collect_task_uuid
+					FROM
+						bot_algorithm_task bat
+					WHERE
+						bat.is_deleted = '0'
+				)
+				ORDER BY
+					`name`;
+	</select>
+	
+	<!-- 算法列表查询 -->
+	<select id="getAlgorithmList" resultType="com.chinobot.aiuas.bot_collect.algorithm.entity.vo.AlgorithmVo">
+		SELECT
+			fo.uuid,
+			fo.algorithm_name AS algorithmName,
+			fo.algorithm_desc AS algorithmDesc,
+			fo.algorithm_version AS algorithmVersion,
+			fo.business_status AS businessStatus,
+			fo.operate_time AS operateTime,
+			pe1.pname AS personName,
+			pe2.pname AS operator
+		FROM
+			bot_algorithm_info fo
+		LEFT JOIN cle_person pe1 ON pe1.uuid = fo.approval_by
+		LEFT JOIN cle_person pe2 ON pe2.uuid = fo.operate_by
+		WHERE
+			fo.is_deleted = '0'
+		<if test="p.algorithmName != null and p.algorithmName != ''">
+			And fo.algorithm_name LIKE CONCAT('%',#{p.algorithmName},'%')
+		</if>
+		<if test="p.algorithmDesc != null and p.algorithmDesc != ''">
+			And fo.algorithm_desc LIKE CONCAT('%',#{p.algorithmDesc},'%')
+		</if>
+		<if test="p.personId != null and p.personId != ''">
+			And fo.approval_by = #{p.personId}
+		</if>
+		<if test="p.operator != null and p.operator != ''">
+			And fo.operate_by = #{p.operator}
+		</if>
+		<if test="p.start != null and p.start != ''">
+			and DATE_FORMAT(fo.operate_time, '%Y-%m-%d') &gt;= #{p.start}
+		</if>
+		<if test="p.end != null and p.end != ''">
+			and DATE_FORMAT(fo.operate_time, '%Y-%m-%d') &lt;= #{p.end}
+		</if>
+		<if test="p.businessStatusArr != null and p.businessStatusArr !=''">
+				AND fo.business_status in
+				<foreach collection="p.businessStatusArr" item="type" index="index"
+					open="(" close=")" separator=",">
+					#{type}
+				</foreach>
+			</if>
+		order by fo.operate_time desc , fo.business_status asc
+	</select>
+	
+	<!-- 算法回显 -->
+	<select id="getAlgorithmById" resultMap="getAlgorithmById">
+		
+		SELECT
+			fo.uuid,
+			fo.algorithm_name AS algorithmName,
+			fo.algorithm_desc AS algorithmDesc,
+			fo.algorithm_version AS algorithmVersion,
+			p.pname AS personName,
+			fo.operate_time AS approveTime,
+			fo.approval_idea AS approvalIdea,
+			e.algorithmic_thinking AS algorithmicThinking,
+			p2.pname AS designer,
+			e.operate_time AS designTime,
+			e.number_standard AS numberStandard,
+			e.operation_standard AS operationStandard,
+			fb.file_id AS taskFileId,
+			ct.t_name AS taskName,
+			ct.uuid AS taskId,
+			s.s_name AS sceneName,
+			d.d_name AS domainName
+		FROM
+			bot_algorithm_info fo
+		LEFT JOIN bot_algorithm_info_ext e ON e.algorithm_uuid = fo.uuid
+		LEFT JOIN cle_person p ON p.uuid = fo.approval_by
+		LEFT JOIN cle_person p2 ON p2.uuid = e.operate_by
+		LEFT JOIN bot_algorithm_task t ON t.algorithm_info_uuid = fo.uuid
+		LEFT JOIN bot_collect_task ct ON ct.uuid = t.collect_task_uuid
+		LEFT JOIN cb_file_bus fb ON fb.bus_id = ct.uuid
+		AND fb.module = 'collect_task_album' AND fb.data_status = '1'
+		LEFT JOIN bot_collect_scene s ON s.uuid = ct.scene_uuid
+		LEFT JOIN bot_collect_domain d ON d.uuid = s.domain_uuid
+		WHERE
+			fo.uuid = #{uuid}
+	
+	</select>
+	
+</mapper>

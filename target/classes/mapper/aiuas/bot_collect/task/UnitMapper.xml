@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.task.mapper.UnitMapper">
+
+    <select id="getUnitList"
+            resultType="com.chinobot.aiuas.bot_collect.task.entity.dto.UnitDto">
+        SELECT
+            u.uuid,
+            u.task_uuid as taskUuid,
+            u.unit_person_type as unitPersonType,
+            u.unit_person_uuid as unitPersonUuid,
+            u.unit_type as unitType,
+            u.organization,
+            p.pname
+        FROM
+            bot_collect_unit u
+            LEFT JOIN cle_person p ON u.unit_person_uuid = p.uuid
+            AND p.data_status = '1'
+        WHERE
+            u.is_deleted = FALSE
+        <if test="p.taskUuid != null and p.taskUuid != ''">
+            AND u.task_uuid = #{p.taskUuid}
+        </if>
+    </select>
+</mapper>

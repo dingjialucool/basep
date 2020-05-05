@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.event.mapper.EventMainMapper">
+
+	<select id="getEventList" resultType="HashMap">
+		SELECT
+			em.uuid,
+			em.warning_id,
+			em.important,
+			em.event_category,
+			em.event_name,
+			em.event_description,
+			em.link_now,
+			em.status,
+			em.source,
+			vg.name,
+			IF(em.warning_id = '',ew.create_time,em.create_time) as waring_time,
+			IF(em.longitude != '' || em.longitude != null, em.longitude,ew.longitude ) as longitude,
+			IF(em.latitude != '' || em.latitude != null, em.latitude, ew.latitude) as latitude,
+			IF(em.link_now = '1', ew.address, CONCAT(ab.address, if(em.supple_address is null, '', em.supple_address))) as address,
+			(case when (em.link_now='3' and rf.conclusion='1' and rv.uuid is null) then '1' else '0' end) as review
+		FROM
+			p_event_main em
+			left join p_early_warning ew on ew.uuid=em.warning_id
+			left join p_village vg on vg.uuid=em.village_id
+			left join cle_address_base ab on ab.uuid=vg.abs_id
+			left join (select max(rr.create_time) as max_time,rr.event_id from p_reform_record rr GROUP BY rr.event_id ) max_rr on max_rr.event_id=em.uuid
+			left join p_reform_record rf on rf.create_time=max_rr.max_time and em.link_now='3'
+			left join p_review_record rv on rf.uuid = rv.reform_id 
+		WHERE
+			em.data_status = '1'
+			<if test="param.deptId != null and param.deptId != ''">
+				AND em.dept_id = #{param.deptId}
+			</if>
+			<if test="param.eventCategory != null and param.eventCategory != ''">
+				AND em.event_category = #{param.eventCategory}
+			</if>
+			<if test="param.eventTime != null and param.eventTime != ''">
+				<choose>
+					<when test="param.eventTime == 0">
+						AND DATE_FORMAT(em.create_time, '%Y-%m-%d') between DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 3 DAY), '%Y-%m-%d') and DATE_FORMAT(NOW(), '%Y-%m-%d')
+					</when>
+					<when test="param.eventTime == 1">
+						AND DATE_FORMAT(em.create_time, '%Y-%m-%d') between DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 7 DAY), '%Y-%m-%d') and DATE_FORMAT(NOW(), '%Y-%m-%d')
+					</when>
+					<when test="param.eventTime == 2">
+						AND DATE_FORMAT(em.create_time, '%Y-%m-%d') between DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH), '%Y-%m-%d') and DATE_FORMAT(NOW(), '%Y-%m-%d')
+					</when>
+					<when test="param.eventTime == 3">
+						AND DATE_FORMAT(em.create_time, '%Y-%m-%d') between DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 3 MONTH), '%Y-%m-%d') and DATE_FORMAT(NOW(), '%Y-%m-%d')
+					</when>
+					<when test="param.eventTime == 4">
+						AND DATE_FORMAT(em.create_time, '%Y-%m-%d') between DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 6 MONTH), '%Y-%m-%d') and DATE_FORMAT(NOW(), '%Y-%m-%d')
+					</when>
+					<when test="param.eventTime == 5">
+						AND DATE_FORMAT(em.create_time, '%Y-%m-%d') &lt; DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 6 MONTH), '%Y-%m-%d')
+					</when>
+				</choose>
+			</if>
+			<if test="param.name != null and param.name != ''">
+				AND vg.name like CONCAT('%', #{param.name}, '%')
+			</if>
+			<if test="param.bp == 'true' or param.pc == 'true' or param.ir == 'true' or param.pv == 'true' or param.cp == 'true'">
+			AND (
+				1 > 1
+				<if test="param.bp != null and param.bp == 'true'">
+					OR (em.link_now = '1' AND em.status = 1 ) 
+				</if>
+				<if test="param.pc != null and param.pc == 'true'">
+					OR ( em.link_now = '2' AND em.status = 1 )	 
+				</if>
+				<if test="param.ir != null and param.ir == 'true'">
+					OR (em.link_now = '3' AND em.status = 1 AND (rf.conclusion = '2' or rf.conclusion is null))	 
+				</if>
+				<if test="param.pv != null and param.pv == 'true'">
+					OR ( em.link_now = '3' AND em.status = 1 AND rf.conclusion='1' AND em.uuid NOT IN (select DISTINCT rf.event_id from p_reform_record rf,	p_review_record rv where rv.data_status=1 AND rf.conclusion='1' AND rf.uuid=rv.reform_id))	 
+				</if>
+				<if test="param.cp != null and param.cp == 'true'">
+					OR (em.status=2)
+				</if>
+			)
+			</if>
+		ORDER BY
+			DATE_FORMAT(waring_time,'%Y-%m-%d') desc, important desc
+	</select>
+	
+	<select id="getLastEventReviewRecord" resultType="HashMap">
+		SELECT
+			rew.* 
+		FROM
+			( SELECT uuid, conclusion FROM p_reform_record ref WHERE event_id = #{eventId} ORDER BY create_time DESC LIMIT 1 ) AS r,
+			p_review_record rew
+		WHERE
+			r.conclusion = 1 
+			AND r.uuid=rew.reform_id
+	</select>	
+		
+	<select id="getImgListByBusId" resultType="HashMap">
+		SELECT
+			uf.* 
+		FROM
+			cb_file_bus fb
+			LEFT JOIN cb_upload_file uf ON uf.uuid = fb.file_id 
+			AND uf.data_status = '1' 
+		WHERE
+			fb.data_status = '1' 
+			and fb.module=#{module}
+			AND fb.bus_id = #{busId}
+	</select>
+	
+	<select id="getVedioListByBusId" resultType="HashMap">
+		SELECT
+	        uf.uuid as fileId,
+			uf.origin_name as name,
+			CONCAT('/aiuas/api/file/ioimage?fileId=', fb.file_id) AS url
+		FROM
+			cb_file_bus fb
+			LEFT JOIN cb_upload_file uf ON uf.uuid = fb.file_id 
+			AND uf.data_status = '1' 
+		WHERE
+			fb.data_status = '1' 
+			and fb.module=#{module}
+			AND fb.bus_id = #{busId}
+	</select>
+	
+    <select id="getEventWarningInfoById" resultType="HashMap">
+    	SELECT
+			em.uuid,
+			em.warning_id,
+			em.important,
+			em.event_category,
+			em.event_name,
+			em.event_description,
+			em.link_now,
+			em.status,
+			em.source,
+			vg.name,
+			em.description,
+			em.is_indoor,
+			em.supple_address,
+			em.construction_type,
+			em.building_materials,
+			em.floor_area,
+			em.layers_number,
+			em.live_situation,
+			em.create_time as waring_time,
+			IF(em.longitude != '' || em.longitude != null, em.longitude,ew.longitude ) as longitude,
+			IF(em.latitude != '' || em.latitude != null, em.latitude, ew.latitude) as latitude,
+			IF(em.link_now = '1', ew.address, CONCAT(ab.address, if(em.supple_address is null, '', em.supple_address))) as address
+		FROM
+			p_event_main em
+			left join p_early_warning ew on ew.uuid=em.warning_id
+			left join p_village vg on vg.uuid=em.village_id
+			left join cle_address_base ab on ab.uuid=vg.abs_id
+		WHERE
+			em.uuid = #{eventId} 
+    </select>
+   	<select id="getPatrolListById" resultType="HashMap" parameterType="Map">
+   		SELECT
+			pr.uuid,
+			pr.time_start,
+			pr.time_end,
+			pr.conclusion,
+			p1.pname, 
+			pr.create_time
+		FROM
+			p_patrol_record pr
+			LEFT JOIN p_event_main em ON em.uuid = pr.event_id
+			LEFT JOIN cle_person p1 ON p1.uuid = pr.create_by 
+		WHERE
+			pr.data_status = '1' AND pr.event_id = #{eventId} 
+		GROUP BY
+			pr.uuid,
+			pr.time_start,
+			pr.time_end,
+			pr.conclusion,
+			p1.pname, 
+			pr.create_time
+   	</select>
+   	<select id="getReformListById" resultType="HashMap" parameterType="Map">
+   		SELECT
+			pr.uuid,
+			pr.time_start,
+			pr.time_end,
+			pr.conclusion,
+			p1.pname, 
+			pr.create_time
+		FROM
+			p_reform_record pr
+			LEFT JOIN p_event_main em ON em.uuid = pr.event_id
+			LEFT JOIN cle_person p1 ON p1.uuid = em.create_by 
+		WHERE
+			pr.data_status = '1' AND pr.event_id = #{eventId} 
+		GROUP BY
+			pr.uuid,
+			pr.time_start,
+			pr.time_end,
+			pr.conclusion,
+			p1.pname, 
+			pr.create_time
+   	</select>
+   	<select id="getAllDeptPosition" resultType="HashMap">
+   		SELECT d.*,ab.center,ab.polyline from cle_dept d left join cle_address_base ab on ab.uuid=d.ab_id where d.data_status='1'
+   	</select>
+   	
+   	<select id="getEventPage2" resultType="HashMap">
+   		SELECT
+	em.uuid,
+	em.code,
+	em.link_now,
+	em.source,
+	em.important,
+	em.status,
+	v.NAME,
+	ab.address,
+	IFNULL( ew.create_time, em.create_time ) create_time,
+	em.event_name,
+	IFNULL( em.latitude, ew.latitude ) AS latitude,
+	IFNULL( em.longitude, em.longitude ) AS longitude,
+	case when (em.link_now='3' and rr2.conclusion='1' and rvr.uuid is null) then '1'
+	else '0' end as review 
+FROM
+	p_event_main em
+	LEFT JOIN p_village v ON v.uuid = em.village_id
+	LEFT JOIN cle_address_base ab ON ab.uuid = v.abs_id
+	LEFT JOIN p_early_warning ew ON ew.uuid = em.warning_id
+	left join (select max(rr.create_time) as max_time,rr.event_id from p_reform_record rr GROUP BY rr.event_id ) max_rr
+	on max_rr.event_id=em.uuid
+	left join p_reform_record rr2 on rr2.create_time=max_rr.max_time and em.link_now='3'
+	left join p_review_record rvr on rvr.reform_id=rr2.uuid
+	WHERE
+			em.data_status = '1'
+			<if test="param.deptId != null and param.deptId !=''">
+			 AND em.dept_id=#{param.deptId}
+			</if>
+			<if test="param.code != null and param.code !=''">
+			AND em.code LIKE CONCAT( '%', #{param.code}, '%' ) 
+			</if>
+			<if test="param.violationType != null and param.violationType !=''">
+			AND em.event_name =${param.violationType}
+			</if>
+			<if test="param.links != null and param.links !=''">
+			AND em.link_now IN ( ${param.links} ) 
+			</if>
+			<if test="param.building_name != null and param.building_name !=''">
+			AND v.name LIKE CONCAT( '%', #{param.building_name}, '%' ) 
+			</if>
+			<if test="param.important != null and param.important !=''">
+			AND em.important = #{param.important} 
+			</if>
+			<if test="param.status != null and param.status !=''">
+			AND em.status IN ( ${param.status} ) 
+			</if>
+			<if test="param.end != null">
+			AND ew.create_time &lt;= #{param.start} AND ew.create_time &gt;= #{param.end}
+			</if>
+	ORDER BY
+			IFNULL( ew.create_time, em.create_time ) DESC
+   	</select>
+</mapper>

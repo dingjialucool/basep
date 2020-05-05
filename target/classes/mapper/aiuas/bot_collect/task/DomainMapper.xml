@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.task.mapper.DomainMapper">
+
+    <select id="getDomain"
+            resultType="com.chinobot.aiuas.bot_collect.task.entity.vo.DomainListVo">
+        SELECT
+            d.uuid,
+            d.d_name AS dName,
+            d.icon,
+            d.parent_uuid AS parentUuid
+        FROM
+            bot_collect_domain d
+        WHERE
+            d.is_deleted = '0'
+            <if test="p.uuid != null and p.uuid != ''">
+                AND d.uuid = #{p.uuid}
+            </if>
+    </select>
+
+    <select id="getDomainSceneList"
+            resultType="com.chinobot.aiuas.bot_collect.task.entity.vo.DomainSceneVo">
+        SELECT
+            d.uuid,
+            d.d_name AS `name`,
+            d.parent_uuid AS parentId,
+            'domain' AS `type`
+        FROM
+            bot_collect_domain d
+        WHERE
+            d.is_deleted = '0'
+        UNION ALL
+        SELECT
+            s.uuid,
+            s.s_name AS `name`,
+            s.domain_uuid AS parentId,
+            'scene' AS `type`
+        FROM
+            bot_collect_scene s
+        WHERE
+            s.is_deleted = '0'
+        ORDER BY `name`
+    </select>
+</mapper>

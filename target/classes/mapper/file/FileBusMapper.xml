@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.common.file.mapper.FileBusMapper">
+	<select id="getFileIdByBusId" resultType="map">
+	   SELECT
+	   	  fb.uuid,
+		  fb.file_id AS fileId,
+		  f.origin_name as name,
+		  f.path as path,
+		  DATE_FORMAT(f.create_time, '%Y-%m-%d')  as flyTime,
+		  CONCAT('/aiuas/api/file/ioimage?fileId=', fb.file_id) AS url
+        <if test="p.url != null and p.url != ''">
+		  ,CONCAT(#{p.url}, fb.file_id) AS url
+        </if>
+		 FROM cb_file_bus fb
+		 left join cb_upload_file f on f.uuid=fb.file_id
+		WHERE fb.data_status = '1'
+		  AND fb.bus_id = #{p.busId}
+        <if test="p.module != null and p.module != ''">
+          AND fb.module = #{p.module}
+        </if>
+        ORDER BY f.create_time DESC
+        <if test="p.limit != null and p.limit != ''">
+          LIMIT #{p.limit}
+        </if>
+	</select>
+</mapper>

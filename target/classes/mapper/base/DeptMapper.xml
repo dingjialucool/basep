@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.base.mapper.DeptMapper">
+    <resultMap type="com.chinobot.cityle.base.entity.vo.VoAddressBase" id="voAddressBaseResultMap">
+        <association property="entity" javaType="map">
+            <id column="uuid" property="uuid"/>
+            <result column="dname" property="dname"/>
+            <result column="dcode" property="dcode"/>
+            <result column="address" property="address"/>
+            <result column="is_del" property="isDel"/>
+            <result column="parent_id" property="parentId"/>
+            <result column="data_Status" property="dataStatus"/>
+            <result column="ab_id" property="abId"/>
+            <result column="fileId" property="fileId"/>
+            <result column="path" property="path"/>
+            <result column="area_id" property="areaId"/>
+            <result column="areaName" property="areaName"/>
+            <result column="organization" property="organization"/>
+        </association>
+        <association property="addressBase" resultMap="com.chinobot.framework.web.mapper.IBaseMapper.addressBaseResultMap">
+        </association>
+    </resultMap>
+	<select id="getDeptAddr" resultMap="voAddressBaseResultMap">
+		SELECT
+		  d.uuid,
+		  d.dname,
+		  d.dcode,
+		  d.address,
+		  d.is_del,
+		  d.parent_id,
+		  d.data_status,
+		  d.ab_id,
+		  d.area_id,
+		  d.organization,
+          ga.name AS areaName,
+          f.uuid AS fileId,
+          f.path,
+          ab.uuid AS ab_uuid,
+          ab.atype AS ab_atype,
+          ab.province AS ab_province,
+          (SELECT `name`
+             FROM cb_regions
+            WHERE `code` = ab.province) AS ab_province_name,
+          ab.city AS ab_city,
+          (SELECT `name`
+             FROM cb_regions
+            WHERE `code` = ab.city) AS ab_city_name,
+          ab.district AS ab_district,
+          (SELECT `name`
+             FROM cb_regions
+            WHERE `code` = ab.district) AS ab_district_name,
+          ab.street AS ab_street,
+          (SELECT `name`
+             FROM cb_regions
+            WHERE `code` = ab.street) AS ab_street_name,
+          ab.address AS ab_address,
+          ab.center AS ab_center,
+          ab.polyline AS ab_polyline,
+          ab.data_status AS ab_data_status
+		FROM
+		  cle_dept d
+		  LEFT JOIN cle_address_base ab
+		    ON d.ab_id = ab.uuid
+	       AND ab.data_status = '1'
+          LEFT JOIN
+            (SELECT
+              uf.uuid,
+              uf.path,
+              fb.bus_id
+            FROM
+              cb_upload_file uf
+              LEFT JOIN cb_file_bus fb
+                ON uf.uuid = fb.file_id
+            WHERE fb.sort = '1'
+              AND fb.module = 'dept_album') f
+            ON f.bus_id = d.uuid
+          LEFT JOIN p_gov_area ga
+            ON ga.id = d.area_id
+            AND ga.data_status = '1'
+	    <if test="p.gridId != null and p.gridId != ''">
+          LEFT JOIN cle_dept_grid dg
+		    ON d.uuid = dg.dept_id
+           AND dg.data_status = '1'
+	    </if>
+	       
+		WHERE 1 = 1
+           <if test="p.dataStatus != null and p.dataStatus != ''">
+              AND d.data_status = #{p.dataStatus}
+          </if>
+		  <if test="p.uuid != null and p.uuid != ''">
+		      AND d.uuid = #{p.uuid}
+		  </if>
+		  <if test="p.dname != null and p.dname != ''">
+		      AND d.dname like CONCAT('%', #{p.dname}, '%')
+		  </if>
+		  <if test="p.gridId != null and p.gridId != ''">
+		      AND dg.grid_id = #{p.gridId}
+		  </if>
+    </select>
+    <select id="getDeptNotUnique" resultType="java.lang.String">
+        SELECT
+          x.name
+        FROM
+          (SELECT
+            a.name,
+            d.area_id,
+            d.organization,
+            COUNT(d.uuid) AS COUNT
+          FROM
+            cle_dept d
+            LEFT JOIN p_gov_area a
+              ON a.id = d.area_id
+          WHERE d.area_id IN
+            (SELECT
+              id
+            FROM
+              p_gov_area
+            WHERE LEVEL = #{unitPersonType}
+              AND data_status = '1')
+            AND d.organization = #{organization}
+            AND d.data_status = '1'
+            AND a.data_status = '1'
+          GROUP BY a.name,
+            d.area_id,
+            d.organization) x
+        WHERE x.count > 1
+    </select>
+</mapper>

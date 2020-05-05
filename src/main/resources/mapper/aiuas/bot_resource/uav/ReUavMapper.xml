@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_resource.uav.mapper.ReUavMapper">
+
+    <select id="getUavList"
+            resultType="com.chinobot.aiuas.bot_resource.uav.entity.vo.UavListVo">
+        SELECT
+            u.uuid,
+            u.ename,
+            u.serial_number AS serialNumber,
+            ut.module_name AS moduleName,
+            ut.type,
+            ut.max_length AS maxLength,
+            ut.max_width AS maxWidth,
+            ut.max_height AS maxHeight,
+            ut.max_load AS maxLoad,
+            ut.max_fly_time_min AS maxFlyTimeMin,
+            ( SELECT
+                    fb.file_id
+                FROM
+                    cb_file_bus fb
+                WHERE
+                    fb.bus_id = u.uuid
+                    AND fb.module = 'uav_img'
+                    AND fb.data_status = '1'
+                ORDER BY fb.sort
+                LIMIT 1
+            ) AS fileId
+        FROM
+            bot_resource_uav u
+            LEFT JOIN bot_resource_uav_type ut ON u.uav_type_uuid = ut.uuid
+            AND ut.is_deleted = FALSE
+        WHERE
+            u.is_deleted = FALSE
+        <if test="p.uavTypeUuid != null and p.uavTypeUuid != ''">
+            AND u.uav_type_uuid = #{p.uavTypeUuid}
+        </if>
+    </select>
+    <select id="getUavInfo"
+            resultType="com.chinobot.aiuas.bot_resource.uav.entity.vo.UavInfoVo">
+        SELECT
+            u.uuid,
+            u.ename,
+            u.serial_number AS serialNumber,
+            u.uav_type_uuid AS uavTypeUuid,
+            u.person_uuid as personId,
+            p.pname as personName,
+            ut.module_name AS moduleName
+        FROM
+            bot_resource_uav u
+            LEFT JOIN bot_resource_uav_type ut ON u.uav_type_uuid = ut.uuid
+            LEFT JOIN cle_person p ON p.uuid = u.person_uuid AND p.data_status = '1'
+        WHERE
+            u.is_deleted = FALSE
+        <if test="p.uuid != null and p.uuid != ''">
+            AND u.uuid = #{p.uuid}
+        </if>
+    </select>
+    <select id="getReUavList" resultType="java.util.Map">
+        SELECT
+          u.uuid,
+          u.ename,
+          u.uuid AS ecode,
+          u.run_status AS runStatus,
+          CASE
+            u.is_deleted
+            WHEN 1
+            THEN 0
+            ELSE 1
+          END AS dataStatus,
+          b.longitude,
+          b.latitude,
+          b.altitude,
+          b.dump_energy AS dumpEnergy
+        FROM
+          bot_resource_uav u
+          LEFT JOIN
+            (SELECT
+              uf.uav_code,
+              uf.longitude,
+              uf.latitude,
+              uf.altitude,
+              uf.dump_energy
+            FROM
+              (SELECT
+                uav_code,
+                MAX(operate_time) `time`
+              FROM
+                p_uav_flight
+              GROUP BY uav_code) s
+              LEFT JOIN p_uav_flight uf
+                ON uf.uav_code = s.uav_code
+                AND uf.operate_time = s.time
+            GROUP BY uf.uav_code,
+              uf.longitude,
+              uf.latitude,
+              uf.altitude,
+              uf.dump_energy) b
+            ON b.uav_code = u.uuid
+        WHERE u.is_deleted = '0'
+        <if test="p.uuid != null and p.uuid != ''">
+            AND u.uuid = #{p.uuid}
+        </if>
+        <if test="p.ename != null and p.ename != ''">
+            AND u.ename like CONCAT('%', #{p.ename}, '%')
+        </if>
+        <if test="p.runStatus != null and p.runStatus != ''">
+            and u.run_status =#{p.runStatus}
+        </if>
+    </select>
+    <select id="getReUavPage"
+            resultType="com.chinobot.plep.home.homepage.entity.vo.HomePageUavVo">
+        SELECT
+            u.uuid,
+            u.ename,
+            u.uuid AS ecode,
+            u.person_uuid as personUuid,
+            uo.run_status,
+            uo.longitude,
+            uo.latitude,
+            uo.flying_height,
+            uo.flight_speed,
+            ut.module_name as uavTypeName
+        FROM
+            bot_resource_uav u
+        LEFT JOIN p_uav_online uo
+        ON u.uuid = uo.uav_code
+        LEFT JOIN cle_person p
+        ON u.person_uuid = p.uuid
+        AND p.data_status = '1'
+        <!-- <if test="p.deptId != null and p.deptId != ''">
+            LEFT JOIN cle_dept d1
+            ON d1.uuid = #{p.deptId}
+            AND d1.data_status = '1'
+        </if> -->
+        LEFT JOIN bot_resource_uav_type ut
+        ON ut.uuid = u.uav_type_uuid
+        AND ut.is_deleted = '0'
+        WHERE u.is_deleted = '0'
+        <if test="p.uuid != null and p.uuid != ''">
+            AND u.uuid = #{p.uuid}
+        </if>
+        <!-- <if test="p.deptId != null and p.deptId != ''">
+            AND d1.dept_code LIKE CONCAT(u.dept_cascade_code, '%')
+        </if> -->
+        <if test="p.name != null and p.name != ''">
+            AND u.ename like CONCAT('%',#{p.name},'%')
+        </if>
+    </select>
+</mapper>

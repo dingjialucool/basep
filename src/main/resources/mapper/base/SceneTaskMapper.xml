@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "hstp://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.base.mapper.SceneTaskMapper">
+    <select id="getTask" resultType="map">
+       SELECT
+          st.uuid,
+          st.scene_id as sceneId,
+          st.tname,
+          st.content,
+          st.tindex,
+          st.tvalue,
+          st.dept_id AS deptId,
+          st.level,
+          st.role_id as roleId,
+          st.push_way as pushWay,
+          d.dname,
+          s.sname
+         FROM
+          cle_scene_task st
+         LEFT JOIN cle_dept d
+           ON st.dept_id = d.uuid
+          AND d.data_status = '1'
+         LEFT JOIN cle_scene s
+           ON st.scene_id = s.uuid
+          AND s.data_status = '1'
+        WHERE 1 = 1
+      <if test="p.dataStatus != null and p.dataStatus != ''">
+          AND st.data_status = #{p.dataStatus}
+      </if>
+      <if test="p.uuid != null and p.uuid != ''">
+          AND st.uuid = #{p.uuid}
+      </if>
+      <if test="p.sceneId != null and p.sceneId != ''">
+          AND st.scene_id = #{p.sceneId}
+      </if>
+      <if test="p.tname != null and p.tname != ''">
+          AND st.tname LIKE CONCAT('%', #{p.tname}, '%')
+      </if>
+      <if test="p.deptId != null and p.deptId != ''">
+          AND st.dept_id LIKE CONCAT('%', #{p.deptId}, '%')
+      </if>
+      <if test="p.deptName != null and p.deptName != ''">
+          AND d.dname LIKE CONCAT('%', #{p.deptName}, '%')
+      </if>
+      <if test="p.level != null and p.level != ''">
+          AND st.level = #{p.level}
+      </if>
+    </select>
+    
+    <insert id="addTempletTask">
+        INSERT INTO cle_scene_task (
+		  `uuid`,
+		  scene_id,
+		  tname,
+		  content,
+		  tindex,
+		  tvalue,
+		  dept_id,
+		  `level`
+		)
+		SELECT
+		  MD5(UUID()) AS `uuid`,
+		  #{sceneId} AS scene_id,
+		  stt.tname,
+		  stt.content,
+		  stt.tindex,
+		  stt.tvalue,
+		  stt.dept_id,
+		  stt.level
+		FROM
+		  cle_scene_task_templet stt
+		WHERE stt.data_status = '1'
+		  AND stt.scene_type = #{sceneType}
+    </insert>
+</mapper>

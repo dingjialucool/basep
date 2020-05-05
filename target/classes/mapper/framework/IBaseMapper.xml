@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.framework.web.mapper.IBaseMapper">
+	<resultMap type="com.chinobot.cityle.base.entity.AddressBase" id="addressBaseResultMap">
+        <id column="ab_uuid" property="uuid"/>
+        <result column="ab_atype" property="atype"/>
+        <result column="ab_center" property="center"/>
+        <result column="ab_polyline" property="polyline"/>
+        <result column="ab_province" property="province"/>
+        <result column="ab_province_name" property="provinceName"/>
+        <result column="ab_city" property="city"/>
+        <result column="ab_city_name" property="cityName"/>
+        <result column="ab_district" property="district"/>
+        <result column="ab_district_name" property="districtName"/>
+        <result column="ab_street" property="street"/>
+        <result column="ab_street_name" property="streetName"/>
+        <result column="ab_address" property="address"/>
+        <result column="ab_data_status" property="dataStatus"/>
+    </resultMap>
+</mapper>

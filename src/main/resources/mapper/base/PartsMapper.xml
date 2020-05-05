@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.base.mapper.PartsMapper">
+   <select id="getParts" resultType="map">
+        SELECT
+          p.uuid,
+          p.ptype,
+          p.pname,
+          p.pcode,
+          p.param,
+          p.data_status as dataStatus,
+		  IFNULL(
+		    (SELECT
+		      u.ename
+		    FROM
+		      cle_uav u
+		    WHERE u.uuid = ep.equipment_id
+		      AND u.data_status = '1'),
+		    '无'
+		  ) AS ename
+        FROM
+          cle_parts p
+        LEFT JOIN cle_equipment_parts ep
+          ON p.uuid = ep.parts_id
+         AND ep.data_status = '1'
+         
+         left join cle_dept d  on d.uuid = p.dept_id
+			<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			</if>
+        WHERE 1 = 1
+        <if test="p.deptId != null and p.deptId != ''">
+               AND d.dept_code like CONCAT(d2.dept_code,'%') 
+        </if>
+        <if test="p.dataStatus != null and p.dataStatus != ''">
+          AND p.data_status = #{p.dataStatus}
+        </if>
+        <if test="p.uuid != null and p.uuid != ''">
+          AND p.uuid = #{p.uuid}
+        </if>
+        <if test="p.ptype != null and p.ptype != ''">
+          AND p.ptype  in 
+		  	<foreach collection="p.ptype" item="type" index="index"  
+	            open="(" close=")" separator=",">  
+	            #{type}  
+        	</foreach>
+        </if>
+        <if test="p.pname != null and p.pname != ''">
+          AND p.pname like CONCAT('%', #{p.pname}, '%')
+        </if>
+        <if test="p.pcode != null and p.pcode != ''">
+          AND p.pcode like CONCAT('%', #{p.pcode}, '%')
+        </if>
+        
+        <if test="p.isMount != null and p.isMount != ''">
+         AND IF(ep.uuid, 1, 0)  in 
+		  	<foreach collection="p.isMount" item="isMount" index="index"  
+	            open="(" close=")" separator=",">  
+	            #{isMount}  
+        	</foreach>
+        </if>
+        <if test="p.equipmentId != null and p.equipmentId != ''">
+          AND ep.equipment_id = #{p.equipmentId}
+        </if>
+        <if test="p.mountEquipment != null and p.mountEquipment != ''">
+           OR (IFNULL(ep.uuid, 0) = 0  AND p.data_status = '1')
+        </if>
+    </select>
+</mapper>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_resource.uav.mapper.FittingMessageMapper">
+
+    <select id="getFittingList"
+            resultType="com.chinobot.aiuas.bot_resource.uav.entity.vo.FittingVo">
+        SELECT
+            fm.uuid,
+            fm.fit_name,
+            fm.fit_number
+        FROM
+            bot_resource_fitting_message fm
+        WHERE
+            fm.is_deleted = FALSE
+        <if test="p.uuid != null and p.uuid != ''">
+            AND fm.uuid = #{p.uuid}
+        </if>
+        <if test="p.uavUuid != null and p.uavUuid != ''">
+            AND fm.uav_uuid = #{p.uavUuid}
+        </if>
+    </select>
+</mapper>

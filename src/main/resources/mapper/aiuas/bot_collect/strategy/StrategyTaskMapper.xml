@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.strategy.mapper.StrategyTaskMapper">
+
+	<resultMap type="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategyReportTaskVo" id="reportMap">
+	
+		<result column="strategyName" property="strategyName"/>
+		<result column="strategyType" property="strategyType"/>
+		<result column="strategyDesc" property="strategyDesc"/>
+		<collection property="sceneVo" ofType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategyReportSceneVo">
+			<result column="sceneName" property="sceneName"/>
+			<collection property="taskName" ofType="string">
+				<result column="taskName" property="taskName"/>
+			</collection>
+			<collection property="objectName" ofType="string">
+				<result column="objectName" property="objectName"/>
+			</collection>
+		</collection>
+	
+	</resultMap>
+	
+	<resultMap type="com.chinobot.aiuas.bot_collect.strategy.entity.dto.StrategyReportOfEventTempDTO" id="reportOfEventAndClueMap">
+	
+		<result column="objectName" property="objectName"/>
+		<result column="event_name" property="eventName"/>
+		<result column="event_type" property="eventType"/>
+		<collection property="eventAndClueDto" ofType="com.chinobot.aiuas.bot_collect.strategy.entity.dto.EventAndClueStatusDTO">
+			<result column="eventId" property="eventId"/>
+			<result column="businessStatus" property="businessStatus"/>
+		</collection>
+	
+	</resultMap>
+
+
+
+	<!-- 策略报告列表与查询 -->
+	<select id="getStrategyList" resultType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategyReportVo">
+		SELECT
+			cs.uuid,
+			cs.strategy_name AS strategyName,
+			cs.strategy_type AS strategyType,
+			IFNULL(a.flightCount,0) AS flightCount,
+			IFNULL(d.taskCount,0) AS taskCount,
+			IFNULL(b.objectCount,0) AS objectCount
+		FROM
+			bot_collect_strategy cs
+		LEFT JOIN bot_prospect_flight pf ON pf.strategy_id = cs.uuid
+		LEFT JOIN (
+			SELECT
+				gy.uuid,
+				COUNT(ht.uuid) AS flightCount
+			FROM
+				bot_collect_strategy gy
+			LEFT JOIN bot_prospect_flight ht ON ht.strategy_id = gy.uuid
+			AND ht.is_deleted = '0'
+			GROUP BY
+				gy.uuid
+		) a ON a.uuid = cs.uuid
+		LEFT JOIN (
+			SELECT
+				gy.uuid,
+				COUNT(DISTINCT i.uuid) AS objectCount
+			FROM
+				bot_collect_strategy gy
+				LEFT JOIN bot_collect_strategy_task t ON t.strategy_uuid = gy.uuid
+				AND t.is_deleted = '0'
+				LEFT JOIN bot_collect_task ct ON ct.uuid = t.task_uuid
+				AND ct.is_deleted = '0'
+				LEFT JOIN bot_collect_info i ON i.uuid = t.collect_uuid
+				AND i.is_deleted = '0'
+			GROUP BY
+				gy.uuid
+		) b ON b.uuid = cs.uuid
+		LEFT JOIN (
+			SELECT
+				s.uuid,
+				COUNT(DISTINCT t.uuid) AS taskCount
+			FROM
+				bot_collect_task t
+			LEFT JOIN bot_collect_strategy_task st ON st.task_uuid = t.uuid
+			LEFT JOIN bot_collect_strategy s ON s.uuid = st.strategy_uuid
+			WHERE
+				t.is_deleted = '0'
+			AND st.is_deleted = '0'
+			GROUP BY
+				s.uuid
+		) d ON d.uuid = cs.uuid
+		
+		WHERE
+			cs.business_status = '1' AND cs.is_deleted = '0'
+		<if test="p.strategyName != null and p.strategyName != ''">
+			And cs.strategy_name LIKE CONCAT('%',#{p.strategyName},'%')
+		</if>
+		<if test="p.strategyType != null and p.strategyType != ''">
+			And cs.strategy_type = #{p.strategyType}
+		</if>
+		GROUP BY
+			cs.uuid,
+			cs.strategy_name,
+			cs.strategy_type,
+			d.taskCount
+		ORDER BY
+			cs.operate_time DESC
+	</select>
+	
+	<!-- 策略报告-任务策略信息 -->
+	<select id="getReportOfStrategyTask" resultMap="reportMap">
+		SELECT DISTINCT
+			gy.strategy_name AS strategyName,
+			gy.strategy_type AS strategyType,
+			gy.strategy_desc AS strategyDesc,
+			ct.t_name AS taskName,
+			s.s_name AS sceneName,
+			i.o_name AS objectName
+		FROM
+			bot_collect_strategy gy
+		LEFT JOIN bot_collect_strategy_task t ON t.strategy_uuid = gy.uuid
+		AND t.is_deleted = '0'
+		LEFT JOIN bot_collect_task ct ON ct.uuid = t.task_uuid
+		AND ct.is_deleted = '0'
+		LEFT JOIN bot_collect_info i ON i.uuid = t.collect_uuid
+		AND i.is_deleted = '0'
+		LEFT JOIN bot_collect_scene s ON ct.scene_uuid = s.uuid
+		WHERE
+			gy.uuid = #{uuid} AND s.is_deleted = '0'
+	</select>
+	
+	<!-- 航线情况 -->
+	<select id="getReportOfFlight" resultType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategyReportFlightVo">
+		SELECT
+			f.flignt_name AS flightName,
+			f.route_lnglats AS routeLnglats
+		FROM
+			bot_prospect_flight f
+		LEFT JOIN bot_collect_strategy s ON f.strategy_id = s.uuid
+		WHERE
+			f.is_deleted = '0'
+		AND f.strategy_id = #{uuid}
+	</select>
+	
+	<!-- 飞行巡查情况 -->
+	<select id="getReportOfFly" resultType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategyReportFlyVo">
+		SELECT
+			i.o_name AS objectName,
+			IFNULL(a.flyPlanCount, 0) AS flyPlanCount,
+			IFNULL(b.flyCompletedCount, 0) AS flyCompletedCount,
+			IFNULL(c.warnCount, 0) AS warnCount,
+			IFNULL(d.taskCount,0) AS taskCount
+		FROM
+			bot_collect_strategy s
+		LEFT JOIN bot_prospect_flight f ON f.strategy_id = s.uuid
+		AND f.is_deleted = '0'
+		LEFT JOIN bot_collect_flight_task ft ON ft.flight_uuid = f.uuid
+		LEFT JOIN bot_collect_info i ON ft.collect_uuid = i.uuid
+		LEFT JOIN (
+			SELECT
+				o.uuid,
+				COUNT(DISTINCT fw.uuid) AS flyPlanCount
+			FROM
+				bot_prospect_flight_work fw
+			LEFT JOIN bot_prospect_flight pf ON fw.flight_uuid = pf.uuid
+			AND pf.is_deleted = '0'
+			LEFT JOIN bot_collect_flight_task ft ON ft.flight_uuid = pf.uuid
+			AND ft.is_deleted = '0'
+			LEFT JOIN bot_collect_info o ON o.uuid = ft.collect_uuid
+			WHERE
+				fw.is_deleted = '0'
+			AND fw.work_status != '0'
+			GROUP BY
+				o.uuid
+		) a ON a.uuid = i.uuid
+		LEFT JOIN (
+			SELECT
+				o.uuid,
+				COUNT(pw.uuid) AS flyCompletedCount
+			FROM
+				bot_collect_info o
+			LEFT JOIN bot_collect_flight_task ft ON ft.collect_uuid = o.uuid
+			AND ft.is_deleted = '0'
+			LEFT JOIN bot_prospect_flight pf ON ft.flight_uuid = pf.uuid
+			AND pf.is_deleted = '0'
+			LEFT JOIN bot_prospect_flight_work pw ON pw.flight_uuid = pf.uuid
+			AND pw.is_deleted = '0'
+			WHERE
+				pw.work_status = '4'
+			GROUP BY
+				o.uuid
+		) b ON b.uuid = i.uuid
+		LEFT JOIN (
+			SELECT
+				i.uuid,
+				COUNT(ew.uuid) AS warnCount
+			FROM
+				bot_event_warning ew
+			LEFT JOIN bot_collect_info i ON i.uuid = ew.collect_object_uuid
+			AND i.is_deleted = '0'
+			WHERE
+				ew.is_deleted = '0'
+			GROUP BY
+				i.uuid
+		) c ON c.uuid = i.uuid
+		LEFT JOIN (
+			SELECT
+				s.uuid,
+				COUNT(DISTINCT t.uuid) AS taskCount
+			FROM
+				bot_collect_task t
+			LEFT JOIN bot_collect_strategy_task st ON st.task_uuid = t.uuid
+			LEFT JOIN bot_collect_strategy s ON s.uuid = st.strategy_uuid
+			WHERE
+				t.is_deleted = '0'
+			AND st.is_deleted = '0'
+			GROUP BY
+				s.uuid
+		) d ON d.uuid = s.uuid
+		WHERE
+			f.strategy_id = #{uuid}
+		AND i.is_deleted = '0'
+		GROUP BY i.o_name,
+		a.flyPlanCount,
+		b.flyCompletedCount,
+		c.warnCount,
+		d.taskCount
+			
+	</select>
+	
+	<!-- 事件统计和线索统计 -->
+	<select id="getReportOfEventAndClue" resultMap="reportOfEventAndClueMap">
+			SELECT
+				i.o_name AS objectName,
+				ei.event_name,
+				ei.event_type,
+				ei.uuid AS eventId,
+				ei.business_status AS businessStatus
+			FROM
+				bot_collect_strategy s
+			LEFT JOIN bot_prospect_flight f ON f.strategy_id = s.uuid
+			AND f.is_deleted = '0'
+			LEFT JOIN bot_prospect_flight_work fw ON fw.flight_uuid = f.uuid and fw.is_deleted = '0'
+			LEFT JOIN bot_event_warning w ON w.flight_task_uuid = fw.uuid
+			LEFT JOIN bot_event_warning_info wi ON wi.warning_uuid = w.uuid
+			LEFT JOIN bot_event_info ei ON ei.uuid = wi.event_uuid
+			LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+			WHERE
+				f.strategy_id = #{uuid}
+			AND i.is_deleted = '0'
+			AND w.is_deleted = '0'
+	</select>
+	
+	<!-- 获取预警信息明细 -->
+	<select id="getReportOfWarnDetail" resultType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategyReportOfWarnDetailVo">
+			SELECT
+				i.o_name AS objectName,
+				w.warning_name AS eventName,
+				w.address,
+				w.accuracy,
+				 (
+					SELECT DISTINCT
+						cb.file_id
+					FROM
+						cb_file_bus cb
+					WHERE
+						cb.bus_id = w.uuid AND cb.data_status = '1'
+					AND cb.module = 'base_img_warn'
+				) AS warnBasicImg,
+				(
+					SELECT DISTINCT
+						cb.file_id
+					FROM
+						cb_file_bus cb
+					WHERE
+						cb.bus_id = w.uuid AND cb.data_status = '1'
+					AND cb.module = 'warning_img'
+				) AS warnImg,
+				(
+					SELECT DISTINCT
+						cb.file_id
+					FROM
+						cb_file_bus cb
+					WHERE
+						cb.bus_id = w.uuid AND cb.data_status = '1'
+					AND cb.module = 'warn_ved'
+				) AS warnVed
+			FROM
+				bot_collect_strategy st
+			LEFT JOIN bot_prospect_flight f ON f.strategy_id = st.uuid
+			AND f.is_deleted = '0'
+			LEFT JOIN bot_prospect_flight_work fw ON fw.flight_uuid = f.uuid
+			AND fw.is_deleted = '0'
+			LEFT JOIN bot_event_warning w ON w.flight_task_uuid = fw.uuid
+			LEFT JOIN bot_collect_info i ON i.uuid = w.collect_object_uuid
+			WHERE
+				i.is_deleted = '0'
+			AND st.uuid = #{uuid}
+			ORDER BY
+				w.warning_time DESC
+	</select>
+	
+	<resultMap type="com.chinobot.aiuas.bot_prospect.flight.entity.vo.CollectResultVo" id="collectDataRsMap" autoMapping="true">
+		<id column="collect_id" property="collectId"/>
+		<collection property="list" ofType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.CollectResultItemVo" autoMapping="true">
+			<id column="rs_key" property="rsKey"/>
+		</collection>
+	</resultMap>
+	
+	<!-- 数量监测 -->
+	<select id="getResultList" resultMap="collectDataRsMap">
+		
+		SELECT
+			cr.work_id,
+			cr.collect_id,
+			ci.o_name collect_name,
+			DATE_FORMAT(
+				cr2.rs_value,
+				'%Y-%m-%d %H:%i'
+			) AS start_time,
+        	DATE_FORMAT(
+				cr3.rs_value,
+				'%Y-%m-%d %H:%i'
+			)  AS end_time,
+			cr.rs_key rs_key,
+			cr.remark title,
+			IFNULL(b.fieldname, cr.rs_value) val,
+			cr.base_data_code
+		FROM
+			bot_collect_result cr
+		LEFT JOIN bot_collect_result cr2 ON cr2.work_id = cr.work_id
+		AND cr2.rs_key = 'startTime'
+		AND cr2.collect_id = cr.collect_id
+		LEFT JOIN bot_collect_result cr3 ON cr3.work_id = cr.work_id
+		AND cr3.rs_key = 'endTime'
+		AND cr3.collect_id = cr.collect_id
+		LEFT JOIN bot_collect_info ci ON ci.uuid = cr.collect_id
+		LEFT JOIN cb_basedata b ON b.data_status = '1'
+		AND b.typecode = cr.base_data_code
+		AND b.fieldcode = cr.rs_value
+		LEFT JOIN bot_prospect_flight_work fw ON fw.uuid = cr.work_id
+		AND fw.is_deleted = '0'
+		LEFT JOIN bot_prospect_flight f ON f.uuid = fw.flight_uuid
+		AND f.is_deleted = '0'
+		WHERE
+			f.strategy_id = #{uuid}
+		AND cr.rs_key != 'startTime'
+		AND cr.rs_key != 'endTime'
+		ORDER BY
+			cr.rs_key,
+			cr.create_time DESC
+	
+	</select>
+</mapper>

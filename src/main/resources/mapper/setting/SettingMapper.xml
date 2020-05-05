@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.setting.mapper.SettingMapper">
+	<!-- 码值列表 -->
+	<select id="getBaseDatas" resultType="HashMap">
+		SELECT
+			uuid,
+			typecode,
+			typename,
+			fieldcode,
+			fieldname,
+			parentid,
+			sort
+		FROM
+			cb_basedata
+		WHERE
+			data_status = '1'
+		<if test="p.uuid != null and p.uuid != ''">
+			and uuid =#{p.uuid}
+		</if>	
+		<if test="p.typename != null and p.typename != ''">
+			and typename like  CONCAT('%',#{p.typename},'%')
+		</if>
+		<if test="p.typecode != null and p.typecode != ''">
+			and typecode like  CONCAT('%',#{p.typecode},'%')
+		</if>
+		<if test="p.fieldname != null and p.fieldname != ''">
+			and fieldname like  CONCAT('%',#{p.fieldname},'%')
+		</if>
+		<if test="p.fieldcode != null and p.fieldcode != ''">
+			and fieldcode like  CONCAT('%',#{p.fieldcode},'%')
+		</if>
+		ORDER BY
+			typename ASC,
+			sort+0 ASC
+	</select>
+	
+	<!-- 角色列表 -->
+	<select id="getRoles" resultType="HashMap">
+		SELECT
+			r.uuid,
+			r.rname,
+			r.is_sys as isSys,
+			r.description,
+			DATE_FORMAT(r.operate_time, '%Y-%m-%d') AS operateTime,
+			p.pname
+		FROM
+			cle_role r
+		LEFT JOIN cle_person p ON r.operate_by = p.uuid
+		WHERE
+			r.data_status = '1'
+		<if test="p.uuid != null and p.uuid != ''">
+			and r.uuid =#{p.uuid}
+		</if>
+		<if test="p.rname != null and p.rname != ''">
+			and r.rname like  CONCAT('%',#{p.rname},'%')
+		</if>
+		<if test="p.isSys != null and p.isSys != ''">
+			and r.is_sys  in 
+        		    <foreach collection="p.isSys" item="type" index="index"  
+			           open="(" close=")" separator=",">  
+			           #{type}  
+			       	</foreach> 
+		</if>
+		
+		ORDER BY
+			r.operate_time DESC,
+			r.is_sys ASC,
+			r.rname ASC
+	</select>
+	
+	<!-- 菜单列表 -->
+	<select id="getMenus" resultType="HashMap">
+		SELECT
+			m1.uuid,
+			m1.title_value as titleValue,
+			m1.key_value as keyValue,
+			m1.icon_value as iconValue,
+			m1.path_value as pathValue,
+			m1.menu_type as menuType,
+			m1.order_by as orderBy,
+			m1.parent_id as parentId,
+			m2.title_value as parent_name
+		FROM
+			cle_menu m1
+			left join cle_menu m2 on m2.uuid=m1.parent_id
+		WHERE
+			m1.data_status = '1'
+		
+		<if test="p.uuid != null and p.uuid != ''">
+			and m1.uuid =#{p.uuid}
+		</if>
+		<if test="p.titleValue != null and p.titleValue != ''">
+			and m1.title_value like  CONCAT('%',#{p.titleValue},'%')
+		</if>
+		<if test="p.keyValue != null and p.keyValue != ''">
+			and m1.key_value like  CONCAT('%',#{p.keyValue},'%')
+		</if>
+		<if test="p.parentName != null and p.parentName != ''">
+			and m2.title_value like CONCAT('%',#{p.parentName},'%')
+		</if>
+		<if test="p.menuType != null and p.menuType !=''">
+         		and m1.menu_type  in 
+        		    <foreach collection="p.menuType" item="type" index="index"  
+			           open="(" close=")" separator=",">  
+			           #{type}  
+			       	</foreach> 
+        </if>
+        ORDER BY
+        	m1.order_by ASC,
+			m1.title_value ASC
+			
+	</select>
+	
+	<!--帮助列表 -->
+	<select id="getHelps" resultType="HashMap">
+		SELECT
+			uuid,
+			module_name as moduleName,
+			title,
+			content,
+			sort
+		FROM
+			p_help
+		WHERE
+			data_status = '1'
+		<if test="p.uuid != null and p.uuid != ''">
+			and uuid =#{p.uuid}
+		</if>
+		<if test="p.moduleName != null and p.moduleName != ''">
+			and module_name like  CONCAT('%',#{p.moduleName},'%')
+		</if>
+		<if test="p.title != null and p.title != ''">
+			and title like  CONCAT('%',#{p.title},'%')
+		</if>
+		
+		ORDER BY
+			module_name ASC,
+			sort ASC,
+			operate_time DESC
+			
+	</select>
+	
+	<!--获取菜单 -->
+	<select id="getTreeMenu" resultType="HashMap">
+		SELECT
+			uuid,
+			title_value AS titleValue
+		FROM
+			cle_menu
+		WHERE
+			data_status = '1'
+		AND (parent_id IS NULL OR parent_id = '')
+		ORDER BY
+			order_by ASC
+	</select>
+	
+	<!--获取角色所管理的菜单 -->
+	<select id="getOnlyRole" resultType="HashMap">
+		SELECT
+			m.uuid,
+			m.title_value
+		FROM
+			cle_role r
+		LEFT JOIN cle_menu_role mr ON mr.role_id = r.uuid
+		LEFT JOIN cle_menu m ON m.uuid = mr.menu_id
+		WHERE
+			mr.data_status = '1'
+			AND m.data_status = '1'
+			<!-- AND (m.parent_id is NULL OR m.parent_id = '') -->
+			AND r.uuid = #{p.uuid}
+		GROUP BY
+			m.uuid,
+			m.title_value
+		ORDER BY
+			m.operate_time DESC,
+			m.title_value ASC,
+			m.order_by ASC
+	</select>
+	
+	<!--角色菜单  -->
+	<select id="getRoleMenu" resultType="HashMap">
+		SELECT
+			m.uuid,
+			m.title_value AS titleValue,
+			m.path_value AS pathValue,
+			m.key_value AS keyValue,
+			m.icon_value AS iconValue,
+			m.menu_type AS menuType
+		FROM
+			 cle_menu m 
+		LEFT JOIN cle_menu_role mr ON m.uuid = mr.menu_id 
+		WHERE
+		m.data_status = '1'
+		AND mr.role_id = #{p.roleId}
+		AND mr.data_status = '1'
+		AND m.parent_id = #{p.uuid}
+		GROUP BY
+			m.uuid,
+			m.title_value,
+			m.path_value,
+			m.key_value,
+			m.icon_value,
+			m.menu_type
+	</select>
+	
+	
+	<!--角色菜单2  -->
+	<select id="getRoleMenus" resultType="HashMap">
+		SELECT DISTINCT
+			m.uuid,
+			m.title_value AS titleValue,
+			m.path_value AS pathValue,
+			m.key_value AS keyValue,
+			<!-- m.icon_value AS icon, -->
+			m.menu_type AS menuType,
+			m.order_by AS orderBy
+		FROM
+			cle_user_role r
+		LEFT JOIN cle_menu_role mr ON r.role_id = mr.role_id
+		LEFT JOIN cle_menu m ON mr.menu_id = m.uuid
+		WHERE
+			m.data_status = '1'
+			AND mr.data_status = '1' 
+		AND  m.parent_id = #{p.uuid}
+		AND r.data_status = '1'
+		AND r.person_id = #{p.personId}
+		ORDER BY
+			m.order_by ASC
+	</select>
+	
+	<select id="getFileInfo" resultType="map">
+		SELECT
+			origin_name AS name,
+			uuid AS fileId,
+			CONCAT(
+				'/aiuas/api/file/ioimage?fileId=',
+				uuid
+			) AS url
+		FROM
+			cb_upload_file
+		where uuid = #{val}	
+	</select>
+	
+	
+</mapper>

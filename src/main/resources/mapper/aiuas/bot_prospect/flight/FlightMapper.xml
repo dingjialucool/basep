@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_prospect.flight.mapper.FlightMapper">
+
+    <select id="getListByStrategyId"
+            resultType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.StrategyFlightVo">
+        SELECT
+          f.`uuid`,
+          flignt_name AS fligntName,
+          route_lnglats as routeLnglats,
+          f.airport_uuid AS airportUuid,
+          a.airport_name AS airportName,
+          f.uav_type_uuid AS uavTypeUuid,
+          ut.module_name AS uavTypeName,
+          f.mode,
+          f.route_file_uuid AS routeFileUuid,
+          fb.file_id AS referenceFileId,
+          uf.origin_name as referenceFileName,
+          uff.origin_name as routeFileName
+        FROM
+          bot_prospect_flight f
+        LEFT JOIN bot_prospect_airport a
+          ON a.uuid = f.airport_uuid
+          AND a.is_deleted = '0'
+        LEFT JOIN bot_resource_uav_type ut
+          ON ut.uuid = f.uav_type_uuid
+          AND ut.is_deleted = '0'
+        LEFT JOIN cb_file_bus fb
+          ON fb.bus_id = f.uuid
+          AND fb.module = 'flight_reference'
+          AND fb.data_status = '1'
+        LEFT JOIN cb_upload_file uf
+            ON uf.uuid = fb.file_id
+            AND uf.data_status = '1'
+        LEFT JOIN cb_upload_file uff
+            ON uff.uuid = f.route_file_uuid
+            AND uff.data_status = '1'
+        WHERE f.is_deleted = '0'
+          AND f.strategy_id = #{strategyId}
+    </select>
+    <select id="getFlightInfoByFlightWorkId" resultType="java.util.Map">
+        SELECT
+          f.flignt_name AS flightName,
+          a.airport_name AS airportName,
+          ut.module_name AS uavTypeName,
+          uf.origin_name AS fileName,
+          uf.uuid as fileUuid,
+          f.route_lnglats AS lnglats,
+          CONCAT('/aiuas/api/file/ioimage?fileId=', uf.uuid) as fileUrl
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+          LEFT JOIN bot_prospect_airport a
+            ON f.airport_uuid = a.uuid
+            AND a.is_deleted = '0'
+          LEFT JOIN bot_resource_uav_type ut
+            ON f.uav_type_uuid = ut.uuid
+            AND ut.is_deleted = '0'
+          LEFT JOIN cb_upload_file uf
+            ON uf.uuid = f.route_file_uuid
+            AND uf.data_status = '1'
+        WHERE fw.is_deleted = '0'
+          AND f.is_deleted = '0'
+          AND fw.uuid = #{flightWorkId}
+    </select>
+    
+    <select id="getUavWorkDetail" resultType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.UavWorkDetailVo">
+	    SELECT
+			t.*,
+			IFNULL( pf.flignt_name, u.urgent_name ) work_name,
+			IFNULL( pf.route_lnglats, CONCAT( u.person_lnglat, ';', u.target_lnglat ) ) plan_path 
+		FROM
+			(
+		SELECT
+			f.work_id,
+			f.work_type,
+			f.work_start_time,
+			GROUP_CONCAT( CONCAT( f.longitude, ',', f.latitude ) ORDER BY f.operate_time ASC SEPARATOR ';' ) real_path 
+		FROM
+			p_uav_flight f 
+		WHERE
+			f.uav_code = #{p.uavCode}
+			AND f.work_id = #{p.workId} 
+			AND f.work_type = #{p.workType} 
+			AND f.work_start_time = #{p.workStartTime} 
+		GROUP BY
+			f.work_id,
+			f.work_type,
+			f.work_start_time 
+			) t
+			LEFT JOIN bot_event_urgent u ON u.uuid = t.work_id 
+			AND t.work_type = '2'
+			LEFT JOIN bot_prospect_flight_work fw ON fw.uuid = t.work_id 
+			AND t.work_type = '1'
+			LEFT JOIN bot_prospect_flight pf ON pf.uuid = fw.flight_uuid
+    </select>
+</mapper>

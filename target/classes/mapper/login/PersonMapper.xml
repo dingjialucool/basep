@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.login.mapper.PersonMapper">
+
+	<select id="getPersonByParam" resultType="map">
+      SELECT
+        p.uuid,
+		p.dept_id AS deptId,
+		p.pname,
+		p.pcode,
+		p.duties,
+		p.phone,
+		p.email,
+		p.wx,
+		p.password,
+        fb.uuid AS fbId,
+        fb.file_id AS fileId
+      <if test="p.url != null and p.url != ''">
+        ,CONCAT(#{p.url}, fb.file_id) AS url
+      </if>
+		FROM cle_person p
+		LEFT JOIN cb_file_bus fb
+		  ON p.uuid = fb.bus_id
+		 AND fb.data_status = '1'
+       <if test="p.module != null and p.module != ''">
+         AND fb.module = #{p.module}
+       </if>
+	   WHERE p.data_status = '1'
+       <if test="p.uuid != null and p.uuid != ''">
+         AND p.uuid = #{p.uuid}
+       </if>
+	</select>
+	
+	<select id="getPersonPage" resultType="map">
+     SELECT
+			p.* ,s.file_id
+		FROM
+			cle_person p
+		LEFT JOIN (
+			SELECT
+				b.*
+			FROM
+				cb_file_bus b
+			WHERE
+				b.module = 'person_face'
+		) s ON p.uuid = s.bus_id
+		AND s.data_status = '1'
+		WHERE
+			p.data_status = '1'
+		  <if test="p.pname != null and p.pname != ''">
+             and p.pname LIKE CONCAT('%', #{p.pname}, '%')
+          </if>
+          <if test="p.deptId != null and p.deptId != ''">
+                and p.dept_id = #{p.deptId}
+          </if>
+          <if test="p.pcode != null and p.pcode != ''">
+                and p.pcode LIKE CONCAT('%', #{p.pcode}, '%')
+          </if>
+          <if test="p.duties != null and p.duties != ''">
+                and p.duties LIKE CONCAT('%', #{p.duties}, '%')
+          </if>
+          <if test="p.phone != null and p.phone != ''">
+                and p.phone LIKE CONCAT('%', #{p.phone}, '%')
+          </if>
+	</select>
+	
+</mapper>

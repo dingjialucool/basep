@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.routedd.mapper.DispatchDetailRouteMapper">
+	 <select id="getRouteFlightTotal" resultType="Map">
+		SELECT 
+			rout.fly_speed,rout.fly_time 
+		FROM 
+				p_dispatch_detail_route dd
+
+			LEFT JOIN p_route rout ON dd.route_id=rout.uuid
+			
+			where  dd.status = '3'
+	</select>
+	<select id="getAllUavForUrgent" resultType="com.chinobot.plep.home.routedd.entity.vo.UrgentUavVo">
+	SELECT
+	u.uuid uav_id,
+	u.ename uav_name,
+	uo.longitude uav_lng,
+	uo.latitude uav_lat,
+	uo.run_status,
+	'14d42331cca0ff323c4a106d5365e13b' as fly_person_id,
+	'燕罗街道管理员' as fly_person_name
+FROM
+	cle_uav u
+	LEFT JOIN cle_dept d1 ON d1.uuid = #{deptId}
+	LEFT JOIN cle_dept d2 ON d2.uuid = u.dept_id
+	LEFT JOIN p_uav_online uo ON uo.uav_code = u.ecode 
+	AND d2.data_status = '1' 
+WHERE
+	u.data_status = '1' 
+	AND u.etype = '1' 
+	AND d2.dept_code LIKE CONCAT( d1.dept_code, '%' ) 
+	AND uo.longitude IS NOT NULL 
+	AND uo.latitude IS NOT NULL
+	</select>
+</mapper>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.task.mapper.SceneMapper">
+
+    <select id="getSceneList"
+            resultType="com.chinobot.aiuas.bot_collect.task.entity.vo.SceneListVo">
+        SELECT
+            s.uuid,
+            s.s_name AS sName,
+            s.operate_time AS operateTime,
+            d.dname,
+            p.pname
+        FROM
+            bot_collect_scene s
+            LEFT JOIN cle_dept d ON s.dept_cascade_code = d.dept_code
+            AND d.data_status = '1'
+            LEFT JOIN cle_person p ON s.operate_by = p.uuid
+            AND p.data_status = '1'
+        WHERE
+            s.is_deleted = '0'
+        <if test="p.domainUuid != null and p.domainUuid != ''">
+            AND s.domain_uuid = #{p.domainUuid}
+        </if>
+    </select>
+</mapper>

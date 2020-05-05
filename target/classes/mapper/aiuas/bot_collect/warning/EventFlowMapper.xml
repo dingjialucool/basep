@@ -1,0 +1,664 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.warning.mapper.EventFlowMapper">
+	
+	<!-- 问题预警总况页面,飞行采查情况 -->
+	<select id="getFlyData" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.QuestionWarningOfFlyVo">
+	
+		SELECT
+			pf.flignt_name AS fligntName,
+			CONCAT(
+				fw.flight_date,
+				' ',
+				fw.flight_time
+			) AS flightTime,
+			format(fw.work_minute / 60, 1) AS workMinute
+		FROM
+			bot_prospect_flight_work fw
+		LEFT JOIN bot_prospect_flight pf ON fw.flight_uuid = pf.uuid
+		LEFT JOIN (
+			SELECT
+				f.uuid,
+				GROUP_CONCAT(DISTINCT ct.scene_uuid) AS sceneUuidList
+			FROM
+				bot_prospect_flight f
+			LEFT JOIN bot_collect_flight_task t ON t.flight_uuid = f.uuid
+			LEFT JOIN bot_collect_task ct ON ct.uuid = t.task_uuid
+			WHERE
+				f.is_deleted = '0'
+			AND t.is_deleted = '0'
+			AND ct.is_deleted = '0'
+			GROUP BY
+				f.uuid
+		) a ON a.uuid = pf.uuid
+		WHERE
+			pf.is_deleted = '0'
+		AND fw.is_deleted = '0'
+		AND fw.flight_time IS NOT NULL
+		AND fw.work_minute IS NOT NULL
+		AND a.sceneUuidList is not null
+		<if test="p.sceneIdList.size > 0">
+			AND  
+			<foreach collection="p.sceneIdList" item="type" index="index"
+				open="(" close=")" separator="or">
+				a.sceneUuidList like CONCAT('%',#{type},'%')  
+			</foreach>
+		</if>
+		<if test="p.start != null">
+			and DATE_FORMAT(fw.flight_date, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+		</if>
+		<if test="p.end != null">
+			and DATE_FORMAT(fw.flight_date, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+		</if>
+			
+		ORDER BY
+			flightTime DESC
+	
+	</select>
+	
+	<!-- 预警问题情况 -->
+	<select id="getWarnData" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.QuestionWarningOfWarnSceneVo">
+	
+		SELECT
+			c.s_name AS sceneName,
+			c.counts AS sceneWarnCount
+		FROM
+			(
+				SELECT
+					(
+						SELECT
+							ga.id AS area_id
+						FROM
+							p_gov_area ga
+						JOIN bot_geo_collection gc ON gc.busi_id = ga.id
+						AND gc.busi_type = 'p_gov_area'
+						WHERE
+							ST_Intersects (
+								gc.shape,
+								GeomFromText (
+									CONCAT(
+										'POINT(',
+										ew.longitude,
+										' ',
+										ew.latitude,
+										')'
+									),
+									4326
+								)
+							) = 1
+						AND ga.parent_id = '47'
+					) AS id,
+					s.s_name,
+					COUNT(ew.uuid) AS counts
+				FROM
+					bot_event_warning ew
+				LEFT JOIN bot_event_warning_info wi ON wi.warning_uuid = ew.uuid
+				LEFT JOIN bot_event_info ei ON wi.event_uuid = ei.uuid
+				LEFT JOIN bot_collect_task t ON t.uuid = ew.task_uuid
+				LEFT JOIN bot_collect_scene s ON t.scene_uuid = s.uuid
+				LEFT JOIN cle_person pe ON pe.uuid = ei.host_by
+				LEFT JOIN cle_dept d ON d.uuid = IFNULL(pe.dept_id, ei.host_unit)
+				WHERE
+					ew.is_deleted = '0'
+				AND s.is_deleted = '0'
+				<if test="p.sceneIdList.size > 0">
+					AND  s.uuid in
+					<foreach collection="p.sceneIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+				<if test="p.start != null">
+					and DATE_FORMAT(ew.warning_time, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+				</if>
+				<if test="p.end != null">
+					and DATE_FORMAT(ew.warning_time, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+				</if>
+				<if test="p.typeIdList.size > 0">
+					AND  ew.warning_type in
+					<foreach collection="p.typeIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+				<if test="p.deptIdList.size > 0">
+					AND  
+					<foreach collection="p.deptIdList" item="type" index="index"
+						open="(" close=")" separator="or">
+						d.dept_code  like CONCAT(#{type},'%') 
+					</foreach>
+				</if>
+				GROUP BY
+					s.s_name,
+					id
+			) c
+			WHERE 1 = 1
+				<if test="p.areaIdList.size > 0">
+					AND c.id in  
+					<foreach collection="p.areaIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+
+	</select>
+	
+	<!-- 地图上 预警经纬度及类型 -->
+	<select id="getWarnLocation" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.QuestionWarningOfWarnLocationVo">
+		SELECT
+			*
+		FROM
+			(
+				SELECT
+					ew.longitude,
+					ew.latitude,
+					ew.warning_type AS warnType,
+					ew.uuid AS warnId,
+					ei.uuid AS eventId,
+					(
+						SELECT
+							ga.id AS area_id
+						FROM
+							p_gov_area ga
+						JOIN bot_geo_collection gc ON gc.busi_id = ga.id
+						AND gc.busi_type = 'p_gov_area'
+						WHERE
+							ST_Intersects (
+								gc.shape,
+								GeomFromText (
+									CONCAT(
+										'POINT(',
+										ew.longitude,
+										' ',
+										ew.latitude,
+										')'
+									),
+									4326
+								)
+							) = 1
+						AND ga.parent_id = '47'
+					) AS id
+				FROM
+					bot_event_warning ew
+				LEFT JOIN bot_event_warning_info wi ON wi.warning_uuid = ew.uuid
+				LEFT JOIN bot_event_info ei ON wi.event_uuid = ei.uuid
+				LEFT JOIN bot_collect_task t ON t.uuid = ew.task_uuid
+				LEFT JOIN bot_collect_scene s ON t.scene_uuid = s.uuid
+				LEFT JOIN cle_person pe ON pe.uuid = ei.host_by
+				LEFT JOIN cle_dept d ON d.uuid = IFNULL(pe.dept_id, ei.host_unit)
+				WHERE
+					ew.is_deleted = '0'
+				AND s.is_deleted = '0'
+				<if test="p.sceneIdList.size > 0">
+					AND  s.uuid in
+					<foreach collection="p.sceneIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+				<if test="p.start != null">
+					and DATE_FORMAT(ew.warning_time, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+				</if>
+				<if test="p.end != null">
+					and DATE_FORMAT(ew.warning_time, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+				</if>
+				<if test="p.typeIdList.size > 0">
+					AND  ew.warning_type in
+					<foreach collection="p.typeIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+				<if test="p.deptIdList.size > 0">
+					AND  
+					<foreach collection="p.deptIdList" item="type" index="index"
+						open="(" close=")" separator="or">
+						d.dept_code  like CONCAT(#{type},'%') 
+					</foreach>
+				</if>
+			) c
+		WHERE
+			1 = 1
+		<if test="p.areaIdList.size > 0">
+			AND c.id in  
+			<foreach collection="p.areaIdList" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+	
+	</select>
+	
+	<!-- 部门 预警分拨数量 -->
+	<select id="getWarnAllocate" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.QuestionWarningOfWarnDeptVo">
+		
+		SELECT
+			*
+		FROM
+			(
+				SELECT
+					d.organization AS deptName,
+					COUNT(ew.uuid) AS allocateCount,
+					(
+						SELECT
+							ga.id AS area_id
+						FROM
+							p_gov_area ga
+						JOIN bot_geo_collection gc ON gc.busi_id = ga.id
+						AND gc.busi_type = 'p_gov_area'
+						WHERE
+							ST_Intersects (
+								gc.shape,
+								GeomFromText (
+									CONCAT(
+										'POINT(',
+										ew.longitude,
+										' ',
+										ew.latitude,
+										')'
+									),
+									4326
+								)
+							) = 1
+						AND ga.parent_id = '47'
+					) AS id
+				FROM
+					bot_event_warning ew
+				LEFT JOIN bot_event_warning_info wi ON wi.warning_uuid = ew.uuid
+				LEFT JOIN bot_event_info ei ON wi.event_uuid = ei.uuid
+				LEFT JOIN bot_collect_task t ON t.uuid = ew.task_uuid
+				LEFT JOIN bot_collect_scene s ON t.scene_uuid = s.uuid
+				LEFT JOIN cle_person pe ON pe.uuid = ei.host_by
+				LEFT JOIN cle_dept d ON d.uuid = IFNULL(pe.dept_id, ei.host_unit)
+				WHERE
+					ew.is_deleted = '0'
+				AND s.is_deleted = '0'
+				AND IFNULL(pe.dept_id, ei.host_unit) IS NOT NULL
+				<if test="p.sceneIdList.size > 0">
+					AND  s.uuid in
+					<foreach collection="p.sceneIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+				<if test="p.start != null">
+					and DATE_FORMAT(ew.warning_time, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+				</if>
+				<if test="p.end != null">
+					and DATE_FORMAT(ew.warning_time, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+				</if>
+				<if test="p.typeIdList.size > 0">
+					AND  ew.warning_type in
+					<foreach collection="p.typeIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+				<if test="p.deptIdList.size > 0">
+					AND  
+					<foreach collection="p.deptIdList" item="type" index="index"
+						open="(" close=")" separator="or">
+						d.dept_code  like CONCAT(#{type},'%') 
+					</foreach>
+				</if>
+				GROUP BY
+					d.organization,
+					id
+			) c
+		WHERE
+			1 = 1
+		<if test="p.areaIdList.size > 0">
+			AND c.id in  
+			<foreach collection="p.areaIdList" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		
+	</select>
+	
+	<!-- 预警处理情况 -->
+	<select id="getWarnDeptStatus" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.QuestionWarningOfDeptStatusVo">
+		SELECT
+			*
+		FROM
+			(
+				SELECT
+					d.organization AS deptName,
+					COUNT(
+						(
+							SELECT
+								i.uuid
+							FROM
+								bot_event_info i
+							WHERE
+								i.business_status = '10'
+							AND i.uuid = ei.uuid
+						)
+					) AS noConfirmDeptCount,
+					COUNT(
+						(
+							SELECT
+								i.uuid
+							FROM
+								bot_event_info i
+							WHERE
+								i.business_status IN ('11', '20', '30', '40')
+							AND i.uuid = ei.uuid
+						)
+					) AS reformedDeptCount,
+					COUNT(
+						(
+							SELECT
+								i.uuid
+							FROM
+								bot_event_info i
+							WHERE
+								i.business_status IN ('88', '99')
+							AND i.uuid = ei.uuid
+						)
+					) AS noReformDeptCount,
+					COUNT(
+						(
+							SELECT
+								i.uuid
+							FROM
+								bot_event_info i
+							WHERE
+								i.business_status = '90'
+							AND i.uuid = ei.uuid
+						)
+					) AS reformCompleteDeptCount,
+					(
+								SELECT
+									ga.id AS area_id
+								FROM
+									p_gov_area ga
+								JOIN bot_geo_collection gc ON gc.busi_id = ga.id
+								AND gc.busi_type = 'p_gov_area'
+								WHERE
+									ST_Intersects (
+										gc.shape,
+										GeomFromText (
+											CONCAT(
+												'POINT(',
+												ew.longitude,
+												' ',
+												ew.latitude,
+												')'
+											),
+											4326
+										)
+									) = 1
+								AND ga.parent_id = '47'
+							) AS id
+				FROM
+					bot_event_warning ew
+				LEFT JOIN bot_event_warning_info wi ON wi.warning_uuid = ew.uuid
+				LEFT JOIN bot_event_info ei ON wi.event_uuid = ei.uuid
+				LEFT JOIN bot_collect_task t ON t.uuid = ew.task_uuid
+				LEFT JOIN bot_collect_scene s ON t.scene_uuid = s.uuid
+				LEFT JOIN cle_person pe ON pe.uuid = ei.host_by
+				LEFT JOIN cle_dept d ON d.uuid = IFNULL(pe.dept_id, ei.host_unit)
+				WHERE
+					ew.is_deleted = '0'
+				AND s.is_deleted = '0'
+				AND IFNULL(pe.dept_id, ei.host_unit) IS NOT NULL
+				<if test="p.sceneIdList.size > 0">
+					AND  s.uuid in
+					<foreach collection="p.sceneIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+				<if test="p.start != null">
+					and DATE_FORMAT(ew.warning_time, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+				</if>
+				<if test="p.end != null">
+					and DATE_FORMAT(ew.warning_time, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+				</if>
+				<if test="p.typeIdList.size > 0">
+					AND  ew.warning_type in
+					<foreach collection="p.typeIdList" item="type" index="index"
+						open="(" close=")" separator=",">
+						#{type}
+					</foreach>
+				</if>
+				<if test="p.deptIdList.size > 0">
+					AND  
+					<foreach collection="p.deptIdList" item="type" index="index"
+						open="(" close=")" separator="or">
+						d.dept_code  like CONCAT(#{type},'%') 
+					</foreach>
+				</if>
+				GROUP BY d.organization, id
+			) c where 1 = 1
+		<if test="p.areaIdList.size > 0">
+			AND c.id in  
+			<foreach collection="p.areaIdList" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		
+	</select>
+	
+	<!-- 在飞航班总数 -->
+	<select id="getFlightingCount" resultType="long">
+		SELECT
+			IFNULL(COUNT(DISTINCT ht.uuid),0) AS flightingCount
+		FROM
+			bot_prospect_flight ht
+		LEFT JOIN bot_prospect_flight_work fw ON fw.flight_uuid = ht.uuid
+		LEFT JOIN (
+			SELECT
+				f.uuid,
+				GROUP_CONCAT(DISTINCT ct.scene_uuid) AS sceneUuidList
+			FROM
+				bot_prospect_flight f
+			LEFT JOIN bot_collect_flight_task t ON t.flight_uuid = f.uuid
+			LEFT JOIN bot_collect_task ct ON ct.uuid = t.task_uuid
+			WHERE
+				f.is_deleted = '0'
+			AND t.is_deleted = '0'
+			AND ct.is_deleted = '0'
+			GROUP BY
+				f.uuid
+		) a ON a.uuid = ht.uuid
+		WHERE
+			fw.is_deleted = '0'
+		AND fw.work_status = '5'
+		AND ht.is_deleted = '0'
+		AND a.sceneUuidList is not null
+		<if test="p.sceneIdList.size > 0">
+			AND  
+			<foreach collection="p.sceneIdList" item="type" index="index"
+				open="(" close=")" separator="or">
+				a.sceneUuidList like CONCAT('%',#{type},'%')  
+			</foreach>
+		</if>
+		<if test="p.start != null">
+			and DATE_FORMAT(fw.flight_date, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+		</if>
+		<if test="p.end != null">
+			and DATE_FORMAT(fw.flight_date, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+		</if>
+	</select>
+	
+	<!-- 已飞航班总数 -->
+	<select id="getFlightedCount" resultType="long">
+		SELECT
+			IFNULL(COUNT(DISTINCT fw.uuid), 0) AS flightingCount
+		FROM
+			bot_prospect_flight ht
+		LEFT JOIN bot_prospect_flight_work fw ON fw.flight_uuid = ht.uuid
+		LEFT JOIN (
+			SELECT
+				f.uuid,
+				GROUP_CONCAT(DISTINCT ct.scene_uuid) AS sceneUuidList
+			FROM
+				bot_prospect_flight f
+			LEFT JOIN bot_collect_flight_task t ON t.flight_uuid = f.uuid
+			LEFT JOIN bot_collect_task ct ON ct.uuid = t.task_uuid
+			WHERE
+				f.is_deleted = '0'
+			
+			GROUP BY
+				f.uuid
+		) a ON a.uuid = ht.uuid
+		WHERE
+			fw.is_deleted = '0'
+		AND fw.work_status = '4'
+		AND ht.is_deleted = '0'
+		AND a.sceneUuidList IS NOT NULL
+		<if test="p.sceneIdList.size > 0">
+			AND  
+			<foreach collection="p.sceneIdList" item="type" index="index"
+				open="(" close=")" separator="or">
+				a.sceneUuidList like CONCAT('%',#{type},'%')  
+			</foreach>
+		</if>
+		<if test="p.start != null">
+			and DATE_FORMAT(fw.flight_date, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+		</if>
+		<if test="p.end != null">
+			and DATE_FORMAT(fw.flight_date, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+		</if>
+	</select>
+	
+	<!-- 任务总数 -->
+	<select id="getFlightTaskObjectCount" resultType="long">
+		SELECT
+			IFNULL(COUNT(bt.uuid), 0) AS taskCount
+		FROM
+			bot_collect_task bt
+		WHERE
+			bt.is_deleted = '0'
+		<if test="p.sceneIdList.size > 0">
+			AND  bt.scene_uuid in 
+			<foreach collection="p.sceneIdList" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.start != null">
+			and DATE_FORMAT(bt.operate_time, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+		</if>
+		<if test="p.end != null">
+			and DATE_FORMAT(bt.operate_time, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+		</if>
+	</select>
+	
+	<!-- 对象总数 -->
+	<select id="getObjectCount" resultType="long">
+		SELECT
+			COUNT(i.uuid) AS objectCount
+		FROM
+			bot_collect_info i
+		LEFT JOIN bot_collect_domain d ON d.uuid = i.domain_uuid
+		LEFT JOIN bot_collect_scene s ON s.domain_uuid = d.uuid
+		WHERE
+			i.is_deleted = '0'
+		AND d.is_deleted = '0'
+		AND s.is_deleted = '0'
+		<if test="p.sceneIdList.size > 0">
+			AND  s.uuid in 
+			<foreach collection="p.sceneIdList" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.start != null">
+			and DATE_FORMAT(i.operate_time, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+		</if>
+		<if test="p.end != null">
+			and DATE_FORMAT(i.operate_time, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+		</if>
+	</select>
+	
+	<!-- 获取场景数 -->
+	<select id="getSceneCount" resultType="long">
+		SELECT
+			COUNT(s.uuid) AS sceneCount
+		FROM
+			bot_collect_scene s
+		WHERE
+			s.is_deleted = '0'
+		<if test="p.sceneIdList.size > 0">
+			AND  s.uuid in
+			<foreach collection="p.sceneIdList" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.start != null">
+			and DATE_FORMAT(s.operate_time, '%Y-%m-%d') &gt;= DATE_FORMAT(#{p.start}, '%Y-%m-%d')
+		</if>
+		<if test="p.end != null">
+			and DATE_FORMAT(s.operate_time, '%Y-%m-%d') &lt;= DATE_FORMAT(#{p.end}, '%Y-%m-%d')
+		</if>
+	</select>
+	
+	
+	<!-- 查询所有场景 -->
+	<select id="getSceneList" resultType="map">
+		SELECT
+			uuid AS 'key',
+			s_name AS names
+		FROM
+			bot_collect_scene
+		WHERE
+			is_deleted = '0'
+	</select>
+	
+	<select id="getAreaList" resultType="map">
+		
+		SELECT
+			CONCAT(id,'') AS 'key',
+			name as names
+		FROM
+			p_gov_area
+		WHERE
+			data_status = '1'
+		AND parent_id = '47'
+		AND `code` NOT IN (
+			'7-47-52',
+			'7-47-53'
+		)
+	
+	</select>
+	
+	<!-- 查询部门 -->
+	<select id="getDeptList" resultType="map">
+		SELECT
+			fieldcode AS 'key',
+			fieldname AS names
+		FROM
+			cb_basedata
+		WHERE
+			data_status = '1'
+		AND typecode = 'bot_collect_organization'
+		AND fieldcode != '02'
+	</select>
+	
+	<!-- 获取边界 -->
+	<select id="getBounday" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.QuestionWarningOfBoundary">
+		
+		SELECT
+			`name`,
+			target_boundary_fomat AS bounday
+		FROM
+			p_gov_area
+		WHERE
+			data_status = '1'
+		<if test="areaIdList.size > 0">
+			AND  
+			<foreach collection="areaIdList" item="type" index="index"
+				open="(" close=")" separator="or">
+				`code`  like CONCAT(#{type},'%') 
+			</foreach>
+		</if>
+	
+	</select>
+	
+</mapper>

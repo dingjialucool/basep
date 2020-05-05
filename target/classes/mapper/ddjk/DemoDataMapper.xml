@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.ddjk.mapper.DemoDataMapper">
+
+    <select id="getDemoDataList" resultType="java.util.Map">
+        SELECT 
+        	uuid,vname,file_id,data_status,create_by,create_time,operate_by,operate_time
+        FROM 
+        	cle_demo_data
+        WHERE 
+        	data_status='1'
+        ORDER BY 
+        	create_time
+    </select>
+    
+    <select id="getFilePath" resultType="java.util.Map">
+        SELECT
+			uf.origin_name, uf.path
+		FROM 
+			cb_upload_file uf, cle_demo_data dd
+		WHERE 
+			dd.data_status=1
+			and dd.uuid=#{param.uuid}
+			and dd.file_id = uf.uuid
+    </select>
+    
+	<delete id="deleteRobotFlight">
+		DELETE FROM cle_robot_flight WHERE scene_uuid=#{param.sceneId} AND task_uuid=#{param.taskId} AND DATE_FORMAT(operate_time,'%Y-%m-%d')=#{param.xcTime} 
+	</delete>    
+	
+	<delete id="deleteRobotGather">
+		DELETE FROM cle_robot_gather_data WHERE scene_uuid=#{param.sceneId} AND task_uuid=#{param.taskId} AND DATE_FORMAT(operate_time,'%Y-%m-%d')=#{param.xcTime} 
+	</delete>    
+	
+	<delete id="deleteRobotTrail">
+		DELETE FROM cle_robot_trail WHERE robot_no=#{param.robotno} AND DATE_FORMAT(operate_time,'%Y-%m-%d')=#{param.xcTime} 
+	</delete>    
+	
+	<delete id="deleteTaskEquipmentDispatch">
+		DELETE FROM cle_task_equipment_dispatch WHERE equipment_id=#{param.equipmentId} AND DATE_FORMAT(create_time,'%Y-%m-%d')=#{param.xcTime} 
+	</delete>
+</mapper>

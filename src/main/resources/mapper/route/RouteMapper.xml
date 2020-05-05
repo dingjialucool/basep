@@ -1,0 +1,600 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.route.mapper.RouteMapper">
+
+	<select id="getIllegalBuilding" resultType="HashMap">
+	SELECT
+	b.uuid,
+	b.name,
+	ab.center,
+	ab.address,
+	case when s2.count is null 
+	then '1' else '0' end as need_plan,
+	dg.dept_id
+FROM
+	p_building b
+	LEFT JOIN ( SELECT em.building_id, count( * ) AS count FROM p_event_main em WHERE em.STATUS = '1' GROUP BY em.building_id ) s1 ON s1.building_id = b.uuid 
+	left join cle_address_base ab on ab.uuid=b.abs_id
+	left join (select rb.building_id,count(*) as count from p_route_building rb  where rb.data_status='1' GROUP BY rb.building_id )s2 on s2.building_id = b.uuid  
+	left join cle_dept_grid dg on dg.grid_id=b.uuid
+WHERE
+	b.data_status = '1' 
+	AND s1.count &gt;0
+	<if test="p.deptId != null and p.deptId != ''">
+	and dg.dept_id=#{p.deptId}
+	</if>
+	</select>
+	
+	<select id="getRouteLine" resultType="HashMap">
+	SELECT
+	b.name,
+	ab.center,
+	ab.polyline
+FROM
+	p_route_building rb
+	LEFT JOIN p_building b ON b.uuid = rb.building_id 
+	left join cle_address_base ab on b.abs_id=ab.uuid
+WHERE
+	rb.data_status = '1' 
+	AND rb.route_id = #{uuid}
+	ORDER BY rb.sort
+	</select>
+
+	<select id="getRouteList" resultType="map">
+		SELECT
+		ddr.uuid AS task_id,
+
+		ddr.STATUS,
+
+		ddr.route_id line_id,
+
+		r.fly_speed,
+
+		r.fly_height,
+
+		GROUP_CONCAT( b.center ORDER BY rb.sort ASC SEPARATOR ';' ) AS line,
+
+		'track' AS lineType,
+
+		NULL AS area_boundary,
+
+		NULL AS range_boundary,
+
+		r.fly_time AS line_time,
+
+		r.building_num AS point_total,
+
+		NULL AS flight_total_long,
+
+		NULL AS expect_photo_time,
+
+		NULL AS AREA,
+
+		NULL AS path_type,
+
+		r.route_name AS line_name,
+
+		r.check_point_id,
+
+		r.time_max,
+
+		NULL AS play_space
+
+		FROM
+		p_dispatch_detail_route ddr
+		LEFT JOIN p_route r ON r.uuid = ddr.route_id AND r.data_status = '1'
+		LEFT JOIN p_route_point rb ON rb.route_id = r.uuid AND rb.data_status = '1'
+		LEFT JOIN p_fixed_point b ON b.uuid = rb.point_id AND b.data_status = '1'
+		WHERE ddr.data_status = '1'
+		<if test="p.dispatchDetailId != null and p.dispatchDetailId != ''">
+			and ddr.dspdt_id = #{p.dispatchDetailId}
+		</if>
+
+
+		GROUP BY
+		ddr.uuid,
+		ddr.STATUS,
+		ddr.route_id,
+		r.fly_time,
+		r.fly_speed,
+		r.fly_height
+
+		UNION
+
+		SELECT
+		ddp.uuid AS task_id,
+		ddp.STATUS,
+		ddp.path_id AS line_id,
+		fc.fly_speed,
+		fc.fly_height,
+		fp.point_collect AS line,
+		'area' AS lineType,
+		fa.boundary AS area_boundary,
+		ab.polyline AS range_boundary,
+		op.time_include_point AS line_time,
+		op.point_total,
+		op.flight_total_long,
+		op.expect_photo_time,
+		op.area,
+		bsda.fieldname AS path_type,
+		CONCAT(r.name,'-区域',fa.code,'-',bsda.fieldname) AS line_name,
+
+		fa.point_id AS check_point_id,
+
+		fc.time_all AS time_max,
+
+		op.play_space
+		FROM
+		p_dispatch_detail_path ddp
+		LEFT JOIN p_fly_path fp ON fp.uuid = ddp.path_id AND fp.data_status = '1'
+		LEFT JOIN p_fly_area fa ON fa.uuid = fp.area_id AND fa.data_status = '1'
+		LEFT JOIN p_range r ON r.uuid = fa.rang_id AND r.data_status = '1'
+		LEFT JOIN cle_address_base ab ON ab.uuid = r.ab_id AND ab.data_status = '1'
+		LEFT JOIN p_fly_config fc ON r.uuid = fc.area_id AND fc.data_status = '1'
+		LEFT JOIN cb_basedata bsda ON bsda.typecode='flyPathType' AND bsda.data_status='1' AND bsda.fieldcode = fp.path_type
+		LEFT JOIN p_output_paramter op ON op.path_id = fp.uuid  AND op.data_status = '1'
+		WHERE ddp.data_status = '1'
+		<if test="p.dispatchDetailId != null and p.dispatchDetailId != ''">
+			and ddp.dspdt_id = #{p.dispatchDetailId}
+		</if>
+
+	</select>
+<!--	<select id="getRoutePoint" resultType="map">-->
+<!--		SELECT-->
+<!--		  rb.*,-->
+<!--		  ab.center-->
+<!--		FROM-->
+<!--		  p_route_building rb-->
+<!--		  LEFT JOIN p_building b-->
+<!--		    ON rb.building_id = b.uuid-->
+<!--		    AND b.data_status = '1'-->
+<!--		  LEFT JOIN cle_address_base ab-->
+<!--		    ON b.abs_id = ab.uuid-->
+<!--		    AND ab.data_status = '1'-->
+<!--		WHERE rb.route_id = #{routeId}-->
+<!--		  AND rb.data_status = '1'-->
+<!--		ORDER BY rb.sort-->
+<!--	</select>-->
+
+	<select id="getRoutePoint" resultType="map">
+	 SELECT
+		ddr.uuid AS task_id,
+		ddr.STATUS,
+		ddr.route_id line_id,
+		r.fly_speed,
+		r.fly_height,
+		GROUP_CONCAT(b.center ORDER BY rb.sort, b.sort ASC SEPARATOR ';' ) AS line,
+		GROUP_CONCAT(b.flyPointId ORDER BY rb.sort, b.sort ASC SEPARATOR ';') AS routePointIds,
+		NULL AS path_id,
+		'track' AS lineType,
+		NULL AS area_boundary,
+		NULL AS range_boundary,
+		r.fly_time AS line_time,
+		r.building_num AS point_total,
+		NULL AS flight_total_long,
+		NULL AS expect_photo_time,
+		NULL AS AREA,
+		NULL AS path_type,
+		r.route_name AS line_name,
+		r.check_point_id,
+		r.time_max,
+		NULL AS play_space,
+		GROUP_CONCAT( IFNULL( b.fly_angle, "" ) ORDER BY rb.sort, b.sort ASC SEPARATOR ';' ) AS flyAngles,
+		GROUP_CONCAT( IFNULL( b.camera_angle, "" ) ORDER BY rb.sort, b.sort ASC SEPARATOR ';' ) AS cameraAngles,
+		GROUP_CONCAT( IFNULL( b.height, "" ) ORDER BY rb.sort, b.sort ASC SEPARATOR ';' ) AS heights
+
+		FROM
+		 p_dispatch_detail_route ddr
+		 LEFT JOIN p_route r ON r.uuid = ddr.route_id AND r.data_status = '1'
+		 LEFT JOIN p_route_point rb ON rb.route_id = r.uuid AND rb.data_status = '1'
+		 LEFT JOIN (
+			SELECT
+				p.uuid,
+				fp.uuid AS flyPointId,
+				fp.center,
+				fp.sort,
+				fp.fly_angle,
+				fp.camera_angle,
+				fp.height
+			FROM
+				p_fixed_point p
+				LEFT JOIN p_fixed_fly_point fp ON fp.fixed_id = p.uuid
+				WHERE p.data_status = '1'
+				AND fp.data_status = '1'
+		 ) b ON b.uuid = rb.point_id
+
+		WHERE ddr.uuid = #{routeId} AND ddr.data_status = '1'
+
+		GROUP BY
+		 ddr.uuid,
+		 ddr.STATUS,
+		 ddr.route_id,
+		 r.fly_time,
+		 r.fly_speed,
+		 r.fly_height
+
+		 UNION
+
+		SELECT
+		 ddp.uuid AS task_id,
+		 ddp.STATUS,
+		 ddp.path_id AS line_id,
+		 fc.fly_speed,
+		 fc.fly_height,
+		 fp.point_collect AS line,
+		 NULL AS routePointIds,
+		 fp.uuid AS path_id,
+		 'area' AS lineType,
+		 fa.boundary AS area_boundary,
+		 ab.polyline AS range_boundary,
+		 op.time_include_point AS line_time,
+		 op.point_total,
+		 op.flight_total_long,
+		 op.expect_photo_time,
+		 op.area,
+		 bsda.fieldname AS path_type,
+		 CONCAT(r.name,'-区域',fa.code,'-',bsda.fieldname) AS line_name,
+		 fa.point_id AS check_point_id,
+		 fc.time_all AS time_max,
+		 op.play_space,
+		 null as flyAngles,
+		 null as cameraAngles,
+		 null as heights
+		FROM
+		 p_dispatch_detail_path ddp
+		 LEFT JOIN p_fly_path fp ON fp.uuid = ddp.path_id AND fp.data_status = '1'
+		 LEFT JOIN p_fly_area fa ON fa.uuid = fp.area_id AND fa.data_status = '1'
+		 LEFT JOIN p_range r ON r.uuid = fa.rang_id AND r.data_status = '1'
+		 LEFT JOIN cle_address_base ab ON ab.uuid = r.ab_id AND ab.data_status = '1'
+		 LEFT JOIN p_fly_config fc ON r.uuid = fc.area_id AND fc.data_status = '1'
+		 LEFT JOIN cb_basedata bsda ON bsda.typecode='flyPathType' AND bsda.data_status='1' AND bsda.fieldcode=fp.path_type
+		 LEFT JOIN p_output_paramter op ON op.path_id = fp.uuid AND op.data_status = '1'
+		WHERE ddp.uuid = #{routeId} AND ddp.data_status = '1'
+	</select>
+
+	<select id="getAllRouteLine" resultType="HashMap">
+	SELECT
+	r.route_name,
+	rb.route_id,
+	r.check_point_id,
+	CONCAT(cp.longitude,',',cp.latitude,';',GROUP_CONCAT(ab.center ORDER BY rb.sort asc SEPARATOR ';')) as line
+FROM
+	p_route r
+	LEFT JOIN p_route_building rb on rb.route_id=r.uuid
+	LEFT JOIN p_building b ON b.uuid = rb.building_id
+	left join cle_address_base ab on b.abs_id=ab.uuid
+	left join p_check_point cp on r.check_point_id=cp.uuid
+	left join cle_dept d on d.uuid=r.dept_id and d.data_status='1'
+	left join cle_dept d2 on d2.uuid=#{p.deptId}
+WHERE
+	r.data_status='1'
+	and rb.data_status = '1'
+	AND d.dept_code like CONCAT(d2.dept_code,'%')
+	<!-- <if test="p.deptId != null and p.deptId != ''">
+         and r.dept_id = #{p.deptId} 
+     </if> -->
+	GROUP BY r.route_name,rb.route_id,r.check_point_id,cp.longitude,cp.latitude
+	</select>
+	
+	<select id="flyRouteList" resultType="map">
+		SELECT
+			ss.uuid,
+			ss.fly_height,
+			ss.fly_speed,
+			ss.fly_time AS line_time,
+			ss.route_name AS line_name,
+			ss.`NAME` AS pointName,
+			ss.operate_time AS operTime,
+			ss.scene_name AS sceneName,
+			ss.`code`,
+			ss.dept_id
+		FROM
+			(
+				SELECT
+					r.uuid,
+					r.route_name,
+					b.scene_name,
+					b.`code`,
+					r.fly_time,
+					r.fly_height,
+					r.fly_speed,
+					cp. NAME,
+					r.`operate_time`,
+					r.dept_id
+				FROM
+					p_route r
+				LEFT JOIN p_check_point cp ON r.check_point_id = cp.uuid
+				LEFT JOIN (
+					SELECT
+						a.uuid,
+						GROUP_CONCAT(DISTINCT e.`code`) AS `code`,
+						GROUP_CONCAT(DISTINCT e. NAME) AS scene_name
+					FROM
+						p_route a
+					LEFT JOIN p_route_point b ON a.uuid = b.route_id
+					LEFT JOIN p_scene_point sp ON sp.point_id = b.point_id
+					LEFT JOIN p_scene s ON sp.scene_id = s.uuid
+					LEFT JOIN p_scene e ON s.parent_id = e.uuid
+					WHERE
+						a.`data_status` = '1'
+					GROUP BY
+						a.uuid
+				) b ON r.uuid = b.uuid
+				WHERE
+					r.data_status = '1'
+				UNION
+					SELECT
+						fp.uuid,
+						CONCAT(
+							r. NAME,
+							'-微区域',
+							fa. CODE,
+							'-',
+							c.fieldname
+						) AS route_name,
+						b.scene_name,
+						b.`code`,
+						op.time_include_point,
+						fc.fly_height,
+						fc.fly_speed,
+						cp. NAME,
+						fp.`operate_time`,
+						dept.dept_id
+					FROM
+						p_range r
+					LEFT JOIN p_fly_area fa ON r.uuid = fa.rang_id
+					LEFT JOIN p_fly_path fp ON fp.area_id = fa.uuid
+					LEFT JOIN (
+						SELECT
+							bd.`fieldcode`,
+							bd.`fieldname`
+						FROM
+							cb_basedata bd
+						WHERE
+							bd.typecode = 'flyPathType'
+						AND bd.data_status = '1'
+					) c ON fp.path_type = c.`fieldcode`
+					LEFT JOIN p_fly_config fc ON fc.`area_id` = r.uuid
+					LEFT JOIN (
+						SELECT
+							r.uuid,
+							GROUP_CONCAT(DISTINCT e.`code`) AS `code`,
+							GROUP_CONCAT(DISTINCT e. NAME) AS scene_name
+						FROM
+							p_range r
+						LEFT JOIN p_scene_range sr ON sr.range_id = r.uuid
+						LEFT JOIN p_scene s ON sr.scene_id = s.uuid
+						LEFT JOIN p_scene e ON s.parent_id = e.uuid
+						WHERE
+							r.`data_status` = '1'
+						GROUP BY
+							r.uuid
+					) b ON r.uuid = b.uuid
+					LEFT JOIN p_output_paramter op ON op.path_id = fp.uuid
+					LEFT JOIN p_check_point cp ON fa.point_id = cp.uuid
+					LEFT JOIN p_range_dept dept ON dept.range_id = r.uuid
+					WHERE
+						r.`data_status` = '1'
+					AND fa.data_status = '1'
+					AND fp.data_status = '1'
+					AND op.data_status = '1'
+					AND fc.data_status = '1'
+			) ss
+			left join cle_dept d  on d.uuid = ss.dept_id
+			<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			</if>
+			where 1=1
+		<if test="p.deptId != null and p.deptId != ''">
+            AND d.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+		<if test="p.heightMin != null and p.heightMin != ''">
+            and ss.fly_height &gt;= CAST(#{p.heightMin} AS SIGNED)
+        </if>
+        <if test="p.heightMax != null and p.heightMax != ''">
+            and ss.fly_height &lt;= CAST(#{p.heightMax} AS SIGNED)
+        </if>
+		<if test="p.speedMin != null and p.speedMin != ''">
+			and ss.fly_speed &gt;= CAST(#{p.speedMin} AS SIGNED)
+		</if>
+		<if test="p.speedMax != null and p.speedMax != ''">
+			and ss.fly_speed &lt;= CAST(#{p.speedMax} AS SIGNED)
+		</if>
+		<if test="p.lineName != null and p.lineName != ''">
+			and ss.route_name like  CONCAT('%',#{p.lineName},'%')
+		</if>
+		<if test="p.pointName != null and p.pointName != ''">
+			and ss.`NAME` like  CONCAT('%',#{p.pointName},'%')
+		</if>
+		<if test="p.domain != null and p.domain !=''">
+       		and  
+     		<foreach collection="p.domain" item="type" index="index"  
+	            separator="or">  
+	          	ss.`code`  like CONCAT('%',#{type},'%')   
+	       	</foreach> 
+        </if>
+        ORDER BY
+			ss.operate_time DESC,
+			ss.route_name asc
+	</select>
+	
+	
+	<select id="flyTaskList" resultType="map">
+		SELECT
+			ss.uuid,
+			ss.`STATUS`,
+			ss.line_name,
+			ss.pointName,
+			ss.sceneName,
+			ss.flyTime,
+			ss.fly_person,
+			ss.uavId,
+			ss.pname,
+			ss.dispatch_name,
+			ss.type,
+			ss.dept_id
+			
+		FROM
+			(
+				SELECT
+					ddr.uuid AS uuid,
+					ddr. STATUS,
+					r.route_name AS line_name,
+					po. NAME AS pointName,
+					rs. NAME AS sceneName,
+					ud.time  AS flyTime,
+					ud.fly_person,
+					ud.uav_id AS uavId,
+					per.pname,
+					ud.route_name AS dispatch_name,
+					'1' AS type,
+					po.dept_id,
+					ud.operate_time
+					
+				FROM
+					p_dispatch_detail_route ddr
+				LEFT JOIN p_route r ON r.uuid = ddr.route_id
+				LEFT JOIN p_check_point po ON r.check_point_id = po.uuid
+				LEFT JOIN (
+					SELECT
+						a.uuid,
+						GROUP_CONCAT(DISTINCT e.`name`) AS `name`
+					FROM
+						p_route a
+					LEFT JOIN p_route_point b ON a.uuid = b.route_id
+					AND a.`data_status` = b.`data_status`
+					LEFT JOIN p_scene_point sp ON sp.point_id = b.point_id
+					LEFT JOIN p_scene s ON sp.scene_id = s.uuid
+					AND sp.`data_status` = s.`data_status`
+					LEFT JOIN p_scene e ON s.parent_id = e.uuid
+					WHERE
+						a.`data_status` = '1'
+					GROUP BY
+						a.uuid
+				) AS rs ON r.uuid = rs.uuid
+				LEFT JOIN p_dispatch_detail dd ON ddr.dspdt_id = dd.uuid
+				LEFT JOIN p_uav_dispatch ud ON dd.uav_dsp_id = ud.uuid
+				LEFT JOIN cle_person per ON ud.fly_person = per.uuid
+				WHERE
+					ddr.data_status = '1'
+				AND po.data_status = '1'
+				AND per.data_status = '1'
+				AND r.data_status = '1'
+			UNION
+				SELECT
+					ddp.uuid AS uuid,
+					ddp. STATUS,
+					CONCAT(
+						r. NAME,
+						'-微区域',
+						fa. CODE,
+						'-',
+						bsda.fieldname
+					) AS line_name,
+					po. NAME AS pointName,
+					bb. NAME AS sceneName,
+					ud.time AS flyTime,
+					ud.fly_person,
+					ud.uav_id AS uavId,
+					per.pname,
+					ud.route_name AS dispatch_name,
+					ddt.type AS type,
+					po.dept_id,
+					ud.operate_time
+					
+				FROM
+					p_dispatch_detail_path ddp
+				LEFT JOIN p_fly_path fp ON fp.uuid = ddp.path_id
+				LEFT JOIN p_fly_area fa ON fa.uuid = fp.area_id
+				LEFT JOIN p_range r ON r.uuid = fa.rang_id
+				LEFT JOIN cb_basedata bsda ON bsda.typecode = 'flyPathType'
+				AND bsda.fieldcode = fp.path_type
+				LEFT JOIN p_check_point po ON po.uuid = fa.point_id
+				LEFT JOIN (
+					SELECT
+						r.uuid,
+						GROUP_CONCAT(DISTINCT e. NAME) AS `name`
+					FROM
+						p_range r
+					LEFT JOIN p_scene_range sr ON sr.range_id = r.uuid
+					AND sr.`data_status` = r.`data_status`
+					LEFT JOIN p_scene s ON sr.scene_id = s.uuid
+					AND sr.`data_status` = s.`data_status`
+					LEFT JOIN p_scene e ON s.parent_id = e.uuid
+					WHERE
+						r.`data_status` = '1'
+					GROUP BY
+						r.uuid
+				) bb ON bb.uuid = r.uuid
+				LEFT JOIN p_dispatch_detail dd ON ddp.dspdt_id = dd.uuid
+				LEFT JOIN p_uav_dispatch ud ON dd.uav_dsp_id = ud.uuid
+				LEFT JOIN cle_person per ON ud.fly_person = per.uuid
+				LEFT JOIN p_dispatch_detail_type ddt ON ddt.dspdt_id = dd.uuid
+				AND ddt.type != '1'
+				
+				WHERE
+					ddp.data_status = '1'
+				AND fa.data_status = '1'
+				AND po.data_status = '1'
+				AND per.data_status = '1'
+				AND r.data_status = '1'
+			) ss
+			left join cle_dept d  on d.uuid = ss.dept_id
+			<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			</if>
+		Where 1 = 1 
+		<if test="p.start != null and p.start != ''">
+            and DATE_FORMAT(ss.flyTime, '%Y-%m-%d') &gt;= #{p.start}
+        </if>
+        <if test="p.end != null and p.end != ''">
+            and DATE_FORMAT(ss.flyTime, '%Y-%m-%d') &lt;= #{p.end}
+        </if>
+		<if test="p.deptId != null and p.deptId != ''">
+            AND d.dept_code like CONCAT(d2.dept_code,'%') 
+        </if>
+		<if test="p.dispatch_name != null and p.dispatch_name != ''">
+			and ss.dispatch_name like  CONCAT('%',#{p.dispatch_name},'%')
+		</if>
+		<if test="p.pointName != null and p.pointName != ''">
+			and ss.pointName like  CONCAT('%',#{p.pointName},'%')
+		</if>
+		<if test="p.taskStatus != null and p.taskStatus !=''">
+         		and ss.`STATUS`  in 
+        		    <foreach collection="p.taskStatus" item="type" index="index"  
+			           open="(" close=")" separator=",">  
+			           #{type}  
+			       	</foreach> 
+        </if>
+        <if test="p.fly_module != null and p.fly_module !=''">
+         		and ss.type  in 
+        		    <foreach collection="p.fly_module" item="type" index="index"  
+			           open="(" close=")" separator=",">  
+			           #{type}  
+			       	</foreach> 
+        </if>
+		ORDER BY
+			ss.flyTime DESC,
+			ss.operate_time desc,
+			ss.dispatch_name asc,
+			ss.line_name asc
+	</select>
+	
+	<select id="getRouteByDeptAndName" resultType="com.chinobot.plep.home.route.entity.Route">
+	SELECT r.* from p_route r 
+	<if test="p.deptId != null and p.deptId != ''">
+	left join cle_dept d on d.uuid=r.dept_id and d.data_status='1'
+	left join cle_dept d2 on d2.uuid=#{p.deptId}
+	</if>
+	left join p_check_point cp on cp.uuid=r.check_point_id
+	where r.data_status='1'
+	and cp.data_status='1'
+	<if test="p.deptId != null and p.deptId != ''">
+	AND d.dept_code like CONCAT(d2.dept_code,'%')
+	</if>
+	<if test="p.name != null and p.name != ''">
+	and r.route_name like CONCAT('%',#{p.name},'%')
+	</if>
+	ORDER BY r.create_time asc
+	</select>
+</mapper>

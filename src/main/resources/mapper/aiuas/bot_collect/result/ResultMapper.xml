@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.result.mapper.ResultMapper">
+    <select id="getProgressCollectList" resultType="map">
+    SELECT * FROM(
+        SELECT
+        r2.collect_id AS collectId,
+        r2.rs_value AS stage,
+        i.o_name AS collectName,
+        a.taskCount,
+        b.dataCount,
+        c.strategyCount,
+        MAX(s.strategy_value) AS strategyValue,
+        g.lng,
+        g.lat,
+        g.lnglats,
+        i.operate_time as operateTime
+        FROM
+        (SELECT
+        r.collect_id,
+        MAX(r.operate_time) AS otime
+        FROM
+        bot_collect_result r
+        WHERE r.is_deleted = '0'
+        AND r.rs_key = 'stage'
+        GROUP BY r.collect_id) r1
+        LEFT JOIN bot_collect_result r2
+        ON r1.collect_id = r2.collect_id
+        AND r1.otime = r2.operate_time
+        AND r2.rs_key = 'stage'
+        LEFT JOIN bot_collect_info i
+        ON r1.collect_id = i.uuid
+        LEFT JOIN
+        (SELECT
+        st.collect_uuid,
+        COUNT(DISTINCT t.uuid) AS taskCount
+        FROM
+        bot_collect_strategy_task st
+        LEFT JOIN bot_collect_task t
+        ON st.task_uuid = t.uuid
+        WHERE st.is_deleted = '0'
+        AND t.is_deleted = '0'
+        AND t.collect_result LIKE '3'
+        GROUP BY st.collect_uuid) a
+        ON a.collect_uuid = i.uuid
+        LEFT JOIN
+        (SELECT
+        d.collect_uuid,
+        COUNT(d.uuid) AS dataCount
+        FROM
+        bot_collect_data d
+        WHERE d.is_deleted = '0'
+        GROUP BY d.collect_uuid) b
+        ON b.collect_uuid = i.uuid
+        LEFT JOIN
+        (SELECT
+        st.collect_uuid,
+        COUNT(DISTINCT st.strategy_uuid) AS strategyCount
+        FROM
+        bot_collect_strategy_task st
+        WHERE st.is_deleted = '0'
+        GROUP BY st.collect_uuid) c
+        ON c.collect_uuid = i.uuid
+        LEFT JOIN bot_collect_strategy_task st
+        ON st.collect_uuid = i.uuid
+        LEFT JOIN bot_collect_strategy s
+        ON s.uuid = st.strategy_uuid
+        LEFT JOIN bot_collect_task t
+        ON st.task_uuid = t.uuid
+        LEFT JOIN bot_collect_geography g
+        ON g.busi_id = i.uuid
+        AND g.is_deleted = '0'
+        WHERE i.is_deleted = '0'
+        AND st.is_deleted = '0'
+        AND t.is_deleted = '0'
+        AND t.collect_result LIKE '3'
+        <if test="collectIds != null and collectIds != ''">
+            AND i.uuid in
+            <foreach collection="collectIds" item="uuid" index="index"
+                     open="(" close=")" separator=",">
+                #{uuid}
+            </foreach>
+        </if>
+        GROUP BY r2.collect_id,
+        r2.rs_value,
+        i.o_name,
+        a.taskCount,
+        b.dataCount,
+        c.strategyCount,
+        g.lng,
+        g.lat,
+        g.lnglats,
+        i.operate_time)x
+        ORDER BY x.operateTime DESC
+    </select>
+    <select id="getProgressCollectOptions" resultType="map">
+		SELECT
+		  i.uuid AS collectId,
+		  i.o_name AS collectName
+		FROM
+		  (SELECT
+			r.collect_id
+		  FROM
+			bot_collect_result r
+		  WHERE r.is_deleted = '0'
+		  GROUP BY r.collect_id) r
+		  LEFT JOIN bot_collect_info i
+			ON r.collect_id = i.uuid
+		  LEFT JOIN bot_collect_strategy_task st
+			ON st.collect_uuid = i.uuid
+		  LEFT JOIN bot_collect_task t
+			ON st.task_uuid = t.uuid
+		WHERE i.is_deleted = '0'
+		  AND st.is_deleted = '0'
+		  AND t.collect_result LIKE '3'
+		GROUP BY i.uuid,
+		  i.o_name
+		ORDER BY i.operate_time DESC
+	</select>
+    <select id="getStatistics" resultType="java.util.Map">
+        SELECT
+          *
+        FROM
+          (SELECT
+            COUNT(DISTINCT fw.flight_uuid) AS flightTotal
+          FROM
+            bot_collect_result r
+            LEFT JOIN bot_collect_info i
+              ON r.collect_id = i.uuid
+            LEFT JOIN bot_collect_strategy_task st
+              ON st.collect_uuid = i.uuid
+            LEFT JOIN bot_collect_task t
+              ON st.task_uuid = t.uuid
+            LEFT JOIN bot_prospect_flight_work fw
+              ON r.work_id = fw.uuid
+          WHERE r.is_deleted = '0'
+            AND i.is_deleted = '0'
+            AND st.is_deleted = '0'
+            AND t.collect_result LIKE '3'
+            AND fw.is_deleted = '0'
+            <if test="collectIds != null and collectIds != ''">
+                AND i.uuid in
+                <foreach collection="collectIds" item="uuid" index="index"
+                         open="(" close=")" separator=",">
+                    #{uuid}
+                </foreach>
+            </if>
+            ) a
+          JOIN
+            (SELECT
+              COUNT(DISTINCT fw.uuid) AS workTotal
+            FROM
+              bot_collect_result r
+              LEFT JOIN bot_collect_info i
+                ON r.collect_id = i.uuid
+              LEFT JOIN bot_collect_strategy_task st
+                ON st.collect_uuid = i.uuid
+              LEFT JOIN bot_collect_task t
+                ON st.task_uuid = t.uuid
+              LEFT JOIN bot_prospect_flight_work fw
+                ON r.work_id = fw.uuid
+            WHERE r.is_deleted = '0'
+              AND i.is_deleted = '0'
+              AND st.is_deleted = '0'
+              AND t.collect_result LIKE '3'
+              AND fw.is_deleted = '0'
+              <if test="collectIds != null and collectIds != ''">
+                AND i.uuid in
+                <foreach collection="collectIds" item="uuid" index="index"
+                         open="(" close=")" separator=",">
+                    #{uuid}
+                </foreach>
+              </if>
+              ) b
+          JOIN
+            (SELECT
+              SUM(fw.work_minute) / 60 AS workHour
+            FROM
+              (SELECT
+                r.collect_id,
+                r.work_id
+              FROM
+                bot_collect_result r
+                LEFT JOIN bot_collect_info i
+                  ON r.collect_id = i.uuid
+                LEFT JOIN bot_collect_strategy_task st
+                  ON st.collect_uuid = i.uuid
+                LEFT JOIN bot_collect_task t
+                  ON st.task_uuid = t.uuid
+              WHERE r.is_deleted = '0'
+                AND i.is_deleted = '0'
+                AND st.is_deleted = '0'
+                AND t.collect_result LIKE '3'
+                <if test="collectIds != null and collectIds != ''">
+                    AND i.uuid in
+                    <foreach collection="collectIds" item="uuid" index="index"
+                             open="(" close=")" separator=",">
+                        #{uuid}
+                    </foreach>
+                </if>
+              GROUP BY r.collect_id,
+                r.work_id) r1
+              LEFT JOIN bot_prospect_flight_work fw
+                ON r1.work_id = fw.uuid
+                AND fw.is_deleted = '0') c
+            JOIN
+                (SELECT
+                    SUM(x.area) AS areaTotal
+                FROM
+                (SELECT
+                    i.uuid,
+                    g.area
+                FROM
+                    bot_collect_result r
+                LEFT JOIN bot_collect_info i
+                    ON r.collect_id = i.uuid
+                LEFT JOIN bot_collect_strategy_task st
+                    ON st.collect_uuid = i.uuid
+                LEFT JOIN bot_collect_task t
+                    ON st.task_uuid = t.uuid
+                LEFT JOIN bot_collect_geography g
+                    ON g.busi_id = i.uuid
+                WHERE r.is_deleted = '0'
+                    AND i.is_deleted = '0'
+                    AND st.is_deleted = '0'
+                    AND t.collect_result LIKE '3'
+                <if test="collectIds != null and collectIds != ''">
+                    AND i.uuid in
+                    <foreach collection="collectIds" item="uuid" index="index"
+                             open="(" close=")" separator=",">
+                        #{uuid}
+                    </foreach>
+                </if>
+                GROUP BY i.uuid,
+                    g.area) x) d
+    </select>
+    <select id="getProgressCollectLnglats" resultType="java.util.Map">
+        SELECT
+          i.uuid AS collectId,
+          g.lnglats
+        FROM
+          (SELECT
+            r.collect_id
+          FROM
+            bot_collect_result r
+          WHERE r.is_deleted = '0'
+          GROUP BY r.collect_id) r
+          LEFT JOIN bot_collect_info i
+            ON r.collect_id = i.uuid
+          LEFT JOIN bot_collect_strategy_task st
+            ON st.collect_uuid = i.uuid
+          LEFT JOIN bot_collect_task t
+            ON st.task_uuid = t.uuid
+          LEFT JOIN bot_collect_geography g
+            ON g.busi_id = i.uuid
+        WHERE i.is_deleted = '0'
+          AND st.is_deleted = '0'
+          AND g.is_deleted = '0'
+          AND t.collect_result LIKE '3'
+          <if test="collectIds != null and collectIds != ''">
+            AND i.uuid in
+            <foreach collection="collectIds" item="uuid" index="index"
+                     open="(" close=")" separator=",">
+                #{uuid}
+            </foreach>
+          </if>
+        GROUP BY i.uuid,
+          g.lnglats
+    </select>
+    <select id="getProgressPieData" resultType="java.util.Map">
+        SELECT
+          r2.collect_id AS collectId,
+          i.o_name AS collectName,
+          r2.rs_value AS stage
+        FROM
+          (SELECT
+            r.collect_id,
+            MAX(r.operate_time) AS otime
+          FROM
+            bot_collect_result r
+          WHERE r.is_deleted = '0'
+            AND r.rs_key = 'stage'
+          GROUP BY r.collect_id) r1
+          LEFT JOIN bot_collect_result r2
+            ON r1.collect_id = r2.collect_id
+            AND r1.otime = r2.operate_time
+            AND r2.rs_key = 'stage'
+          LEFT JOIN bot_collect_info i
+            ON i.uuid = r2.collect_id
+          LEFT JOIN bot_collect_strategy_task st
+            ON st.collect_uuid = i.uuid
+          LEFT JOIN bot_collect_task t
+            ON t.uuid = st.task_uuid
+        WHERE st.is_deleted = '0'
+          AND t.is_deleted = '0'
+          AND t.collect_result LIKE '3'
+        <if test="collectIds != null and collectIds != ''">
+            AND i.uuid in
+            <foreach collection="collectIds" item="uuid" index="index"
+                     open="(" close=")" separator=",">
+                #{uuid}
+            </foreach>
+        </if>
+        GROUP BY
+          r2.collect_id,
+          i.o_name,
+          r2.rs_value
+        ORDER BY stage
+    </select>
+    <select id="getFlightWork" resultType="java.util.Map">
+        SELECT
+          i.uuid AS collectId,
+          i.o_name as collectName,
+          IFNULL(fw.work_minute / 60, 0) AS workHour,
+          IFNULL(COUNT(fw.uuid), 0) AS workCount,
+          IFNULL(g.area, 0) as area
+        FROM
+          (SELECT
+            r.collect_id,
+            r.work_id
+          FROM
+            bot_collect_result r
+          WHERE r.is_deleted = '0'
+          GROUP BY r.collect_id,
+            r.work_id) r
+          LEFT JOIN bot_collect_info i
+            ON r.collect_id = i.uuid
+          LEFT JOIN bot_collect_strategy_task st
+            ON st.collect_uuid = i.uuid
+          LEFT JOIN bot_collect_task t
+            ON st.task_uuid = t.uuid
+          LEFT JOIN bot_prospect_flight_work fw
+            ON fw.uuid = r.work_id
+            AND fw.is_deleted = '0'
+          LEFT JOIN bot_collect_geography g
+            ON g.busi_id = i.uuid
+            AND g.is_deleted = '0'
+        WHERE i.is_deleted = '0'
+          AND st.is_deleted = '0'
+          AND t.is_deleted = '0'
+          AND t.collect_result LIKE '3'
+        <if test="collectIds != null and collectIds != ''">
+            AND i.uuid in
+            <foreach collection="collectIds" item="uuid" index="index"
+                     open="(" close=")" separator=",">
+                #{uuid}
+            </foreach>
+        </if>
+        GROUP BY i.uuid,
+          i.o_name,
+          fw.work_minute,
+          g.area
+        ORDER BY i.operate_time DESC
+    </select>
+    <!-- 数量监测总况 - 根据不同的任务，不同的类型，查询车辆数量以及人员数量 -->
+      <select id="getResultNumberInfo" resultType="HashMap">
+        SELECT d.collect_id,i.o_name as collect_name,f.flight_date,d.work_id,d.rs_key,d.rs_value
+		FROM bot_collect_result d
+		left join bot_collect_info i on i.uuid = d.collect_id
+		LEFT JOIN bot_prospect_flight_work f ON f.uuid = d.work_id
+		 LEFT JOIN bot_collect_flight_task t ON d.collect_id = t.collect_uuid
+		AND f.flight_uuid = t.flight_uuid
+		where d.is_deleted = '0' <!-- and f.work_status = '4'  -->
+		<if test="p.taskUuid != null and p.taskUuid != '' ">
+				and t.task_uuid = #{p.taskUuid}
+		</if>
+		<if test="p.rsKey != null and p.rsKey != '' ">
+				and d.rs_key = #{p.rsKey}
+		</if>
+		<if test="p.timeType == 'day'">
+				and TO_DAYS(f.flight_date) = TO_DAYS(NOW())
+		</if>
+		<if test="p.timeType == 'week'">
+				and YEARWEEK(DATE_FORMAT(f.flight_date,'%Y-%m-%d')) = YEARWEEK(NOW())
+		</if>
+		<if test="p.timeType == 'month'">
+				and DATE_FORMAT(f.flight_date,'%Y%m') = DATE_FORMAT(CURDATE(),'%Y%m')
+		</if>
+		<if test="p.timeType == 'quarter'">
+				and QUARTER(f.flight_date) = QUARTER(NOW())
+		</if>
+		<if test="p.timeType == 'year'">
+				and YEAR(f.flight_date) = YEAR(NOW())
+		</if>
+		ORDER BY d.rs_value desc
+
+    </select>
+    <select id="getProgressCollectInfo" resultType="java.util.Map">
+        SELECT
+          r2.rs_value AS stage,
+          s.uuid AS strategyUuid,
+          s.strategy_name AS strategyName,
+          GROUP_CONCAT(DISTINCT t.t_name) AS tasks,
+          s.strategy_value AS strategyValue
+        FROM
+          bot_collect_info i
+          LEFT JOIN
+            (SELECT
+              r.collect_id,
+              MAX(r.operate_time) AS otime
+            FROM
+              bot_collect_result r
+            WHERE r.is_deleted = '0'
+              AND r.rs_key = 'stage'
+            GROUP BY r.collect_id) r1
+            ON r1.collect_id = i.uuid
+          LEFT JOIN bot_collect_result r2
+            ON r1.collect_id = r2.collect_id
+            AND r1.otime = r2.operate_time
+            AND r2.rs_key = 'stage'
+          LEFT JOIN bot_collect_strategy_task st
+            ON st.collect_uuid = i.uuid
+          LEFT JOIN bot_collect_strategy s
+            ON s.uuid = st.strategy_uuid
+          LEFT JOIN bot_collect_task t
+            ON t.uuid = st.task_uuid
+        WHERE i.uuid = #{collectId}
+          AND t.collect_result LIKE '3'
+        GROUP BY r2.rs_value,
+          s.uuid,
+          s.strategy_name,
+          s.strategy_value
+    </select>
+</mapper>

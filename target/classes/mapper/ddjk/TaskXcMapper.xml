@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.ddjk.mapper.TaskXcMapper">
+
+    <select id="getSceneForJournal" resultType="java.util.Map">
+        SELECT
+	        s.uuid,s.grid_id,s.ab_id,s.stype,s.bus_type,s.sname,s.address,s.imp,
+	        count(distinct tx.uuid) task_count,
+	        count(distinct rgd.uuid) warning_count,
+	        Max(tx.xc_time) last_xc,
+	        Max(rgd.operate_time) last_warning
+		FROM        
+			cle_task_xc tx 
+    	LEFT JOIN
+        	cle_scene s 
+            on tx.ref_slience=s.uuid and s.data_status = '1'
+    	LEFT JOIN
+        	cle_robot_gather_data rgd 
+        	on rgd.scene_uuid=s.uuid and rgd.is_warning='1' 
+    	WHERE
+			tx.task_status='4' 
+        	and tx.data_status='1' 
+			and tx.xc_time &lt; DATE_FORMAT(now(), '%Y-%m-%d')      
+        <if test="param.sname != null and param.sname !=''">
+            and s.sname like CONCAT(CONCAT('%',#{param.sname}),'%')
+        </if>
+        <if test="param.bus_type != null and param.bus_type !=''">
+        	
+                    and s.bus_type in 
+				  	<foreach collection="param.bus_type" item="type" index="index"  
+			            open="(" close=")" separator=",">  
+			            #{type}  
+		        	</foreach> 
+	               
+        </if>
+        <if test="param.address != null and param.address !=''">
+            and s.address like CONCAT(CONCAT('%',#{param.address}),'%')
+        </if>
+        <if test="param.stype != null and param.stype !=''">
+            
+             		and s.stype in 
+				  	<foreach collection="param.stype" item="type" index="index"  
+			            open="(" close=")" separator=",">  
+			            #{type}  
+		        	</foreach> 
+        </if>
+	    group by s.uuid,s.grid_id,s.ab_id,s.stype,s.bus_type,s.sname,s.address,s.imp 
+	    order by Max(tx.xc_time) desc, last_warning DESC
+    </select>
+    <select id="getTaskForJournal" resultType="java.util.Map">
+        SELECT distinct
+	        tx.uuid,
+	        tx.task_code,
+	        tx.ref_slience,
+	        tx.task_status,
+	        tx.complete_time,
+	        tx.xc_time,
+	        tx.early_day,
+	        tx.normal_pro,
+	        tx.create_time,
+			rf.longitude,
+			rf.latitude
+        FROM
+        cle_task_xc tx
+        left join cle_robot_gather_data rgd on rgd.task_uuid=tx.uuid
+		LEFT JOIN
+		  (SELECT
+		    task_uuid,
+		    MAX(longitude) AS longitude,
+		    MAX(latitude) AS latitude
+		  FROM
+		    cle_robot_flight
+		  WHERE location_type = '1'
+		  GROUP BY task_uuid) rf
+             ON rf.task_uuid = tx.uuid
+        WHERE
+        tx.data_status='1'
+        and tx.ref_slience = #{param.uuid}
+        and tx.xc_time &lt; DATE_FORMAT(now(),'%Y-%m-%d')
+        <if test="param.min != null and param.min !=''">
+        and  DATE_FORMAT(tx.xc_time,'%Y-%m-%d') &gt;= DATE_FORMAT(#{param.min},'%Y-%m-%d')
+        </if>
+        <if test="param.max != null and param.max !=''">
+        and  DATE_FORMAT(tx.xc_time,'%Y-%m-%d') &lt;= DATE_FORMAT(#{param.max},'%Y-%m-%d')
+        </if>
+        group by tx.uuid,
+	        tx.task_code,
+	        tx.ref_slience,
+	        tx.task_status,
+	        tx.complete_time,
+	        tx.xc_time,
+	        tx.early_day,
+	        tx.normal_pro,
+	        tx.create_time,
+			rf.longitude,
+			rf.latitude
+        <if test="param.warning != null and param.warning !=''">
+        having IF(locate('1',IFNULL(GROUP_CONCAT(DISTINCT rgd.is_warning SEPARATOR ','),'0') )> 0,'1','0') =#{param.warning}
+        </if>
+        ORDER BY
+        tx.xc_time DESC
+    </select>
+    
+    <select id="getTaskXcListByEquipment" resultType="java.util.Map">
+         SELECT
+	        xc.uuid,
+	        xc.task_code,
+	        xc.ref_slience,
+	        xc.task_status,
+	        xc.complete_time,
+	        xc.xc_time,
+	        xc.early_day,
+	        xc.normal_pro,
+	        xc.task_explain,
+	        xc.data_status,
+	        xc.create_by,
+	        xc.create_time,
+	        xc.operate_by,
+	        xc.operate_time 
+	    FROM
+			cle_task_equipment_dispatch ed,
+	        cle_task_xc xc
+	    WHERE
+			ed.task_id = xc.uuid
+	        and xc.ref_slience = #{param.sid}
+	        and ed.equipment_id= #{param.equipmentId}
+	        AND xc.data_status = '1' 
+	    ORDER BY
+	        xc_time DESC
+    </select>
+    
+    <select id="getPatrolCount" resultType="map">
+		SELECT
+		  COUNT(DISTINCT tx.uuid) AS 'taskTotal',
+		  COUNT(DISTINCT a.uuid) AS 'nofinishCount',
+		  COUNT(b.uuid) AS 'warningCount'
+		FROM
+		  cle_task_xc tx
+		  LEFT JOIN
+		    (SELECT
+		      *
+		    FROM
+		      cle_task_xc tx2
+		    WHERE tx2.task_status <![CDATA[<>]]> '4'
+		      AND tx2.data_status = '1') a
+		    ON tx.uuid = a.uuid
+		  LEFT JOIN
+		    (SELECT
+		      *
+		    FROM
+		      cle_robot_gather_data rgd
+		    WHERE rgd.is_warning = '1'
+		    <if test="p.xcTime != null and p.xcTime != ''">
+		      AND DATE_FORMAT(rgd.operate_time,'%Y-%m-%d') = #{p.xcTime}) b
+            </if>
+		    ON tx.uuid = b.task_uuid
+		WHERE tx.task_status IN ('2', '3', '4', '6')
+		  AND tx.data_status = '1'
+		<if test="p.xcTime != null and p.xcTime != ''">
+		  AND tx.xc_time = #{p.xcTime}
+		</if>
+    </select>
+    
+    <select id="getAttendanceCount" resultType="map">
+        SELECT
+		  u.etype,
+		  COUNT(DISTINCT u.uuid) AS 'equipmentCount',
+		  COUNT(DISTINCT epd.person_id) AS 'personCount'
+		FROM
+		  cle_task_xc tx
+		  LEFT JOIN cle_task_equipment_dispatch ted
+		    ON tx.uuid = ted.task_id
+		    AND ted.data_status = '1'
+		  LEFT JOIN cle_uav u
+		    ON u.uuid = ted.equipment_id
+		    AND u.data_status = '1'
+		  LEFT JOIN cle_equipment_person_dispatch epd
+		    ON u.uuid = epd.equipment_id
+		    AND epd.data_status = '1'
+		WHERE u.uuid IS NOT NULL
+		  AND tx.data_status = '1'
+		  AND tx.task_status IN ('2', '3', '4', '6')
+		  <if test="p.xcTime != null and p.xcTime != ''">
+			  AND tx.xc_time = #{p.xcTime}
+		  </if>
+		GROUP BY u.etype
+    </select>
+    <select id="getBusTypeCount" resultType="map">
+        SELECT
+		  s.bus_type as busType,
+		  COUNT(DISTINCT tx.uuid) as typeCount
+		FROM
+		  cle_task_xc tx
+		  LEFT JOIN cle_scene s
+		    ON tx.ref_slience = s.uuid
+	       AND s.data_status = '1'
+		WHERE tx.data_status = '1'
+		  AND tx.task_status IN ('2', '3', '4', '6')
+		<if test="p.xcTime != null and p.xcTime != ''">
+		  AND tx.xc_time = #{p.xcTime}
+		</if>
+		GROUP BY s.bus_type
+    </select>
+    
+    <select id="getTaskXcList" resultType="map">
+	    SELECT
+		  tx.uuid,
+		  tx.task_code as taskCode,
+		  tx.ref_slience as refSlience,
+		  tx.task_status as taskStatus,
+		  tx.complete_time as completeTime,
+		  tx.xc_time as xcTime,
+		  tx.early_day as earlyDay,
+		  tx.data_status as dataStatus,
+		  tx.create_by as createBy,
+		  tx.create_time as createTime,
+		  tx.operate_by as operateBy,
+		  tx.operate_time as operateTime,
+		  tx.normal_pro as normalPro,
+		  tx.task_explain as taskExplain
+		FROM
+		  cle_task_xc tx
+		WHERE tx.data_status = '1'
+		  AND task_status in ('2','3','4','6')
+		  AND LENGTH(tx.task_explain)  &gt; 0
+        <if test="p.xcTime != null and p.xcTime != ''">
+          AND tx.xc_time = #{p.xcTime}
+        </if>
+		ORDER BY tx.operate_time DESC
+		<if test="p.limit != null and p.limit != ''">
+		  LIMIT #{p.limit}
+		</if>
+    </select>
+    <select id="getTaskMonitorCount" resultType="map">
+		SELECT
+		  a.taskCount,
+		  b.finishTaskCount,
+		  c.warningCount
+		FROM
+		  (SELECT
+		    COUNT(UUID) AS taskCount
+		  FROM
+		    cle_task_xc
+		  WHERE data_status = '1') a,
+		  (SELECT
+		    COUNT(UUID) AS finishTaskCount
+		  FROM
+		    cle_task_xc
+		  WHERE data_status = '1'
+		    AND task_status = '4') b,
+		  (SELECT
+		    COUNT(DISTINCT task_id) AS warningCount
+		  FROM
+		    cle_early_warning_record
+		  WHERE data_status = '1') c
+    </select>
+    <select id="getTaskMonitorList" resultType="java.util.LinkedHashMap">
+	    SELECT
+		  *
+		FROM
+		  (SELECT
+		    DATE_FORMAT(rgd.operate_time, '%Y-%m-%d') AS `date`,
+		    DATE_FORMAT(rgd.operate_time, '%k:%i:%s') AS `time`,
+		    rgd.warn_content AS content,
+		    'warning' AS `type`
+		  FROM
+		    cle_robot_gather_data rgd
+		    LEFT JOIN cle_task_xc tx
+		      ON rgd.task_uuid = tx.uuid
+		      AND tx.data_status = '1'
+		  WHERE rgd.operate_time IS NOT NULL
+		    AND rgd.warn_content IS NOT NULL
+		    AND LENGTH(rgd.warn_content) &gt; 0
+		    AND rgd.is_warning = '1' 
+	        <if test="p.xcTime != null and p.xcTime != ''">
+	          AND tx.xc_time = #{p.xcTime}
+	          AND DATE_FORMAT(rgd.operate_time,'%Y-%m-%d') = #{p.xcTime} 
+	        </if>
+		  UNION ALL
+		  SELECT
+		    DATE_FORMAT(tx.complete_time, '%Y-%m-%d') AS `date`,
+		    DATE_FORMAT(tx.complete_time, '%k:%i:%s') AS `time`,
+		    tx.task_explain AS content,
+		    'monitor' AS `type`
+		  FROM
+		    cle_task_xc tx
+		  WHERE tx.data_status = '1'
+		    AND task_status IN ('2', '3', '4', '6')
+		    AND LENGTH(tx.task_explain) &gt; 0 
+            <if test="p.xcTime != null and p.xcTime != ''">
+              AND tx.xc_time = #{p.xcTime}
+            </if>
+		  ) a
+		ORDER BY a.date DESC, a.time DESC
+        <if test="p.limit != null and p.limit != ''">
+          LIMIT #{p.limit}
+        </if>
+    </select>
+</mapper>

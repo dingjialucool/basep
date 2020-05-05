@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.route.mapper.CheckPointMapper">
+
+<select id="getAllCheckPointBydept" resultType="com.chinobot.plep.home.route.entity.CheckPoint">
+	SELECT cp.* from p_check_point cp 
+	<if test="p.deptId != null and p.deptId != ''">
+	left join cle_dept d on d.uuid=cp.dept_id and d.data_status='1'
+	left join cle_dept d2 on d2.uuid=#{p.deptId}
+	</if>
+	where cp.data_status='1'
+	<if test="p.deptId != null and p.deptId != ''">
+	AND d.dept_code like CONCAT(d2.dept_code,'%')
+	</if>
+</select>
+<select id="getCountOfPath" resultType="Long">
+SELECT count(distinct path.uuid) as path_count from (SELECT
+	r.uuid as uuid
+FROM
+	p_route r 
+	left join cle_dept d on d.uuid=r.dept_id and d.data_status='1'
+	left join cle_dept d2 on d2.uuid=#{p.deptId}
+	left join p_route_point rp on rp.data_status='1' and rp.route_id=r.uuid
+	left join p_fixed_point fp on fp.data_status='1' and fp.uuid=rp.point_id
+	left join p_scene_point sp on sp.point_id=fp.uuid and sp.data_status='1'
+	left join p_scene s on s.data_status='1' and s.uuid=sp.scene_id
+WHERE
+	r.data_status = '1'
+	<if test="p.sceneId != null and p.sceneId != ''">
+	and sp.scene_id=#{p.sceneId}
+	</if>
+	and s.parent_id=#{p.domainId}
+	AND d.dept_code like CONCAT(d2.dept_code,'%')
+UNION
+SELECT
+	fp.uuid as uuid
+FROM
+	p_fly_path fp 
+	left JOIN p_fly_area fa on fa.data_status='1' and fa.uuid=fp.area_id
+	left join p_range r on r.data_status='1' and r.uuid=fa.rang_id
+	left join p_range_dept rd on rd.data_status='1' and rd.range_id=r.uuid
+	left join cle_dept d on d.uuid=rd.dept_id and d.data_status='1'
+	left join cle_dept d2 on d2.uuid=#{p.deptId}
+	left join p_scene_range sr on sr.data_status='1' and sr.range_id=r.uuid
+	left join p_scene s on s.data_status='1' and s.uuid=sr.scene_id
+WHERE
+	fp.data_status = '1'
+	<if test="p.sceneId != null and p.sceneId != ''">
+	and sr.scene_id=#{p.sceneId}
+	</if>
+	and s.parent_id=#{p.domainId}
+	AND d.dept_code like CONCAT(d2.dept_code,'%')
+	) path
+</select>
+<select id="getCountOfCheckPoint" resultType="Long">
+SELECT COUNT(DISTINCT point.uuid) as point_count from 
+	(
+		SELECT cp.uuid from p_check_point cp
+		left join cle_dept d on d.uuid=cp.dept_id and d.data_status='1'
+		left join cle_dept d2 on d2.uuid=#{p.deptId}
+		where cp.data_status='1'
+		AND d.dept_code like CONCAT(d2.dept_code,'%')
+	) point
+</select>
+<select id="getCheckPointAndTaskCount" resultType="com.chinobot.plep.home.homepage.entity.vo.HomePageTaskCountOfPointVo">
+SELECT
+	cp.name,
+	cp.longitude,
+	cp.latitude,
+	count( DISTINCT task.uuid ) AS task_count 
+FROM
+	p_check_point cp
+	LEFT JOIN p_dispatch_detail dd ON dd.data_status = '1' 
+	AND dd.point_id = cp.uuid
+	LEFT JOIN p_uav_dispatch ud ON ud.data_status = '1' 
+	AND ud.uuid = dd.uav_dsp_id
+	LEFT JOIN cle_dept d ON d.uuid = cp.dept_id 
+	AND d.data_status = '1'
+	LEFT JOIN cle_dept d2 ON d2.uuid = #{p.deptId}
+	LEFT JOIN (
+SELECT distinct
+	ddp.uuid,
+	ddp.dspdt_id 
+FROM
+	p_dispatch_detail_path ddp 
+	left join p_fly_path fp on fp.data_status='1' and fp.uuid=ddp.path_id
+	left JOIN p_fly_area fa on fa.data_status='1' and fa.uuid=fp.area_id
+	left join p_range r on r.data_status='1' and r.uuid=fa.rang_id
+	left join p_scene_range sr on sr.data_status='1' and sr.range_id=r.uuid
+	left join p_scene s on s.data_status='1' and s.uuid=sr.scene_id
+WHERE
+	ddp.data_status = '1' 
+	<if test="p.sceneId != null and p.sceneId != ''">
+	and sr.scene_id=#{p.sceneId}
+	</if>
+	and s.parent_id=#{p.domainId}
+	UNION
+SELECT distinct
+	ddr.uuid,
+	ddr.dspdt_id 
+FROM
+	p_dispatch_detail_route ddr 
+	left join p_route r on r.data_status='1' and ddr.route_id=r.uuid
+	left join p_route_point rp on rp.data_status='1' and rp.route_id=r.uuid
+	left join p_fixed_point fp on fp.data_status='1' and fp.uuid=rp.point_id
+	left join p_scene_point sp on sp.point_id=fp.uuid and sp.data_status='1'
+	left join p_scene s on s.data_status='1' and s.uuid=sp.scene_id
+WHERE
+	ddr.data_status = '1' 
+	<if test="p.sceneId != null and p.sceneId != ''">
+	and sp.scene_id=#{p.sceneId}
+	</if>
+	and s.parent_id=#{p.domainId}
+	) task ON task.dspdt_id = dd.uuid 
+WHERE
+	cp.data_status = '1' 
+	AND ud.time = DATE_FORMAT( NOW(), '%Y-%m-%d' ) 
+	<!-- AND d.dept_code LIKE CONCAT( d2.dept_code, '%' )  -->
+	AND d.uuid = d2.uuid
+GROUP BY
+	cp.NAME,
+	cp.longitude,
+	cp.latitude
+</select>
+<select id="getRangePolygon" resultType="String">
+SELECT DISTINCT
+	ab.polyline 
+FROM
+	p_range r
+	LEFT JOIN p_range_dept rd ON rd.data_status = '1' 
+	AND rd.range_id = r.uuid
+	LEFT JOIN cle_dept d ON d.uuid = rd.dept_id 
+	AND d.data_status = '1'
+	LEFT JOIN cle_dept d2 ON d2.uuid = #{p.deptId}
+	LEFT JOIN cle_address_base ab ON ab.uuid = r.ab_id
+	LEFT JOIN p_scene_range sr ON sr.range_id = r.uuid and sr.data_status='1'
+	left join p_scene s on s.data_status='1' and s.uuid=sr.scene_id
+WHERE
+	r.data_status = '1' 
+	AND d.dept_code LIKE CONCAT( d2.dept_code, '%' ) 
+	and s.parent_id=#{p.domainId}
+	<if test="p.sceneId != null and p.sceneId != ''">
+	and sr.scene_id=#{p.sceneId}
+	</if>
+</select>
+<select id="getDeptPolygon" resultType="String">
+SELECT ga.target_boundary from cle_dept d 
+left join p_gov_area ga on d.area_id=ga.id
+where d.data_status='1' and d.uuid=#{p.deptId}
+</select>
+<select id="getMaxCount" resultType="Long">
+select max(t.count) count from(SELECT
+	count(DISTINCT fp.uuid) count, d2.uuid, s.uuid as scene_id
+FROM
+	p_fly_path fp 
+left join p_fly_area fa on fa.data_status='1' and fa.uuid=fp.area_id
+left join p_range r on r.data_status ='1' and r.uuid=fa.rang_id
+left join p_scene_range sr on sr.data_status='1' and sr.range_id=r.uuid
+LEFT JOIN p_range_dept rd ON rd.data_status = '1' 
+	AND rd.range_id = r.uuid
+	LEFT JOIN cle_dept d ON d.uuid = rd.dept_id 
+	AND d.data_status = '1'
+	LEFT JOIN cle_dept d2 ON d2.uuid in 
+	<foreach collection="p.depts" index="index" item="item"
+            open="(" separator="," close=")">
+            #{item.uuid}
+    </foreach>
+    left join p_scene s on s.data_status='1' and s.uuid=sr.scene_id
+WHERE
+	fp.data_status = '1'
+	AND d.dept_code LIKE CONCAT( d2.dept_code, '%' ) 
+	and s.parent_id=#{p.domainId}
+	GROUP BY d2.uuid, s.uuid) t
+</select>
+<select id="getPathCountByDeptAndScene" resultType="com.chinobot.plep.home.homepage.entity.vo.HomePageAreaRendaSceneVo">	
+	SELECT
+s.uuid, s.name,	count(DISTINCT fp.uuid) count
+FROM
+p_scene s
+left join p_scene_range sr on sr.data_status='1' and sr.scene_id=s.uuid
+left join p_range r on r.data_status ='1' and r.uuid=sr.range_id
+LEFT JOIN p_range_dept rd ON rd.data_status = '1' and rd.range_id=r.uuid
+LEFT JOIN cle_dept d ON d.uuid = rd.dept_id 
+AND d.data_status = '1'
+LEFT JOIN cle_dept d2 ON d2.uuid =#{p.deptId}
+left join p_fly_area fa on fa.data_status='1' and fa.rang_id=r.uuid
+left join p_fly_path fp on fp.data_status='1' and fp.area_id=fa.uuid AND d.dept_code LIKE CONCAT( d2.dept_code, '%' ) 
+WHERE
+	s.data_status = '1'
+	and s.parent_id=#{p.domainId}
+	and s.uuid in
+	<foreach collection="p.scenes" index="index" item="item"
+            open="(" separator="," close=")">
+            #{item.uuid}
+    </foreach>
+	GROUP BY s.uuid,s.name
+	ORDER BY s.name
+</select>
+<select id="getHomePageEarlyWarningInfo" resultType="com.chinobot.plep.home.homepage.entity.vo.HomePageEarlyWarningDeptMonthVo">
+SELECT
+	'全部' as mon, COUNT( DISTINCT em.uuid ) count 
+FROM
+	p_event_main em 
+	left join p_scene s on s.data_status='1' and s.parent_id is null and s.code=em.scene_type
+	left join p_scene s2 on s2.data_status='1' and s2.parent_id=s.uuid and s2.code=em.early_type
+	LEFT JOIN cle_dept d ON d.uuid = em.dept_id
+	LEFT JOIN cle_dept d2 ON d2.uuid =#{p.deptId}
+WHERE
+	em.data_status = '1' 
+	and s.uuid=#{p.domainId}
+	<if test="p.sceneId != null and p.sceneId != ''">
+	and s2.uuid=#{p.sceneId}
+	</if>
+  AND d.dept_code LIKE CONCAT( d2.dept_code, '%' ) 
+ UNION
+(SELECT
+	DATE_FORMAT(t.mon,'%c月份') as mon,count(distinct em.uuid) as count
+FROM
+	( SELECT CURDATE( ) AS mon 
+	UNION SELECT DATE_ADD( CURDATE( ), INTERVAL - 1 MONTH ) AS mon
+	UNION SELECT DATE_ADD( CURDATE( ), INTERVAL - 2 MONTH ) AS mon
+	UNION SELECT DATE_ADD( CURDATE( ), INTERVAL - 3 MONTH ) AS mon
+	UNION SELECT DATE_ADD( CURDATE( ), INTERVAL - 4 MONTH ) AS mon
+	UNION SELECT DATE_ADD( CURDATE( ), INTERVAL - 5 MONTH ) AS mon
+) t
+left join p_scene s on s.data_status='1' and s.uuid=#{p.domainId}
+<if test="p.sceneId != null and p.sceneId != ''">
+left join p_scene s2 on s2.data_status='1' and s2.uuid=#{p.sceneId}
+</if>
+LEFT JOIN cle_dept d2 ON d2.uuid =#{p.deptId}
+LEFT JOIN cle_dept d ON d.dept_code LIKE CONCAT( d2.dept_code, '%' ) 
+left join p_event_main em on em.data_status='1' and DATE_FORMAT(t.mon,'%Y%m')= DATE_FORMAT(em.create_time,'%Y%m') 
+and em.scene_type=s.code and em.dept_id=d.uuid
+<if test="p.sceneId != null and p.sceneId != ''">
+and em.early_type=s2.code
+</if>
+
+
+GROUP BY t.mon
+ORDER BY t.mon asc)
+</select>
+
+	<select id="getCountOfLine" resultType="Long">
+		SELECT count(distinct path.uuid) as path_count from (SELECT
+			r.uuid as uuid
+		FROM
+			p_route r 
+			left join cle_dept d on d.uuid=r.dept_id and d.data_status='1'
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			left join p_route_point rp on rp.data_status='1' and rp.route_id=r.uuid
+			left join p_fixed_point fp on fp.data_status='1' and fp.uuid=rp.point_id
+			left join p_scene_point sp on sp.point_id=fp.uuid and sp.data_status='1'
+			left join p_scene s on s.data_status='1' and s.uuid=sp.scene_id
+		WHERE
+			r.data_status = '1'
+			<if test="p.sceneId != null and p.sceneId != ''">
+			and sp.scene_id=#{p.sceneId}
+			</if>
+			and s.parent_id=#{p.domainId}
+			AND d.dept_code like CONCAT(d2.dept_code,'%')
+		UNION
+		SELECT
+			fp.uuid as uuid
+		FROM
+			p_fly_path fp 
+			left JOIN p_fly_area fa on fa.data_status='1' and fa.uuid=fp.area_id
+			left join p_range r on r.data_status='1' and r.uuid=fa.rang_id
+			left join p_range_dept rd on rd.data_status='1' and rd.range_id=r.uuid
+			left join cle_dept d on d.uuid=rd.dept_id and d.data_status='1'
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			left join p_scene_range sr on sr.data_status='1' and sr.range_id=r.uuid
+			left join p_scene s on s.data_status='1' and s.uuid=sr.scene_id
+		WHERE
+			fp.data_status = '1'
+			<if test="p.sceneId != null and p.sceneId != ''">
+			and sr.scene_id=#{p.sceneId}
+			</if>
+			and s.parent_id=#{p.domainId}
+			AND d.dept_code like CONCAT(d2.dept_code,'%')
+			) path
+	</select>
+	
+	<select id="getRangeByLinePolygon" resultType="String">
+		SELECT DISTINCT
+			ab.polyline 
+		FROM
+			p_range r
+		LEFT JOIN p_fly_area fa ON r.uuid = fa.rang_id
+		LEFT JOIN p_fly_path fp ON fp.area_id = fa.uuid
+		LEFT JOIN p_range_dept rd ON rd.data_status = '1' 
+		AND rd.range_id = r.uuid
+		LEFT JOIN cle_dept d ON d.uuid = rd.dept_id 
+		AND d.data_status = '1'
+		LEFT JOIN cle_dept d2 ON d2.uuid = #{p.deptId}
+		LEFT JOIN cle_address_base ab ON ab.uuid = r.ab_id
+		LEFT JOIN p_scene_range sr ON sr.range_id = r.uuid and sr.data_status='1'
+		left join p_scene s on s.data_status='1' and s.uuid=sr.scene_id
+		WHERE
+			r.data_status = '1' 
+			AND fa.data_status = '1'
+			AND fp.data_status = '1'
+			AND d.dept_code LIKE CONCAT( d2.dept_code, '%' ) 
+			and s.parent_id=#{p.domainId}
+			<if test="p.sceneId != null and p.sceneId != ''">
+			and sr.scene_id=#{p.sceneId}
+			</if>
+	</select>
+	
+	
+	
+	<select id="getTotalOfFlyTime" resultType="string">
+		SELECT
+				SUM(r.fly_time) AS totalTime
+		FROM
+			p_route r
+		
+		left join cle_dept d  on d.uuid = r.dept_id
+		<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid = #{p.deptId}
+		</if>
+		where r.`data_status` = '1'
+		
+		<if test="p.deptId != null and p.deptId != ''">
+            AND d.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+	</select>
+	
+	<select id="getFlyNum" resultType="map">
+		SELECT
+			ss.uuid,
+			ss.flightTotal
+		FROM
+			(
+				SELECT
+					ddr.uuid AS uuid,
+					ddr. STATUS,
+					po.dept_id,
+					rs.sceneId,
+					rs.domainId,
+					r.fly_time * r.fly_speed*60 AS flightTotal
+				FROM
+					p_dispatch_detail_route ddr
+				LEFT JOIN p_route r ON r.uuid = ddr.route_id
+				LEFT JOIN p_check_point po ON r.check_point_id = po.uuid
+				LEFT JOIN (
+					SELECT
+						a.uuid,
+						GROUP_CONCAT(DISTINCT s.uuid) AS sceneId,
+						GROUP_CONCAT(DISTINCT s.parent_id) AS domainId
+					FROM
+						p_route a
+					LEFT JOIN p_route_point b ON a.uuid = b.route_id
+					AND a.`data_status` = b.`data_status`
+					LEFT JOIN p_fixed_point c ON b.point_id = c.uuid
+					AND b.`data_status` = c.`data_status`
+					LEFT JOIN p_scene_point sp ON sp.point_id = c.uuid
+					AND sp.`data_status` = c.`data_status`
+					LEFT JOIN p_scene s ON sp.scene_id = s.uuid
+					AND sp.`data_status` = s.`data_status`
+					WHERE
+						a.`data_status` = '1'
+					GROUP BY
+						a.uuid
+				) rs ON r.uuid = rs.uuid
+				WHERE
+					ddr.data_status = '1'
+				AND po.data_status = '1'
+				AND r.data_status = '1'
+				UNION
+					SELECT
+						ddp.uuid AS uuid,
+						ddp. STATUS,
+						po.dept_id,
+						bb.sceneId,
+						bb.domainId,
+						op.flight_total_long AS flightTotal
+					FROM
+						p_dispatch_detail_path ddp
+					LEFT JOIN p_fly_path fp ON fp.uuid = ddp.path_id
+					LEFT JOIN p_fly_area fa ON fa.uuid = fp.area_id
+					LEFT JOIN p_range r ON r.uuid = fa.rang_id
+					LEFT JOIN p_check_point po ON po.uuid = fa.point_id
+					LEFT JOIN p_output_paramter op ON op.path_id = fp.uuid
+					LEFT JOIN (
+						SELECT
+							r.uuid,
+							GROUP_CONCAT(DISTINCT s.uuid) AS sceneId,
+							GROUP_CONCAT(DISTINCT s.parent_id) AS domainId
+						FROM
+							p_range r
+						LEFT JOIN p_scene_range sr ON sr.range_id = r.uuid
+						AND sr.`data_status` = r.`data_status`
+						LEFT JOIN p_scene s ON sr.scene_id = s.uuid
+						AND sr.`data_status` = s.`data_status`
+						WHERE
+							r.`data_status` = '1'
+						GROUP BY
+							r.uuid
+					) bb ON bb.uuid = r.uuid
+					WHERE
+						ddp.data_status = '1'
+					AND fa.data_status = '1'
+					AND po.data_status = '1'
+					AND r.data_status = '1'
+					AND op.data_status = '1'
+			) ss
+			left join cle_dept d  on d.uuid = ss.dept_id
+			<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			</if>
+			WHERE ss.`STATUS` = '3'
+			AND ss.domainId = #{p.domainId}
+			<if test="p.sceneId != null and p.sceneId != ''">
+				AND ss.sceneId = #{p.sceneId}
+			</if>
+			<if test="p.deptId != null and p.deptId != ''">
+	            AND d.dept_code like CONCAT(d2.dept_code,'%')
+	        </if>
+	</select>
+	<select id="getUavByDept" resultType="com.chinobot.plep.home.homepage.entity.vo.HomePageUavVo">
+		SELECT
+			u.uuid, u.ename, u.ecode, uo.run_status, uo.longitude, uo.latitude, uo.flying_height, uo.flight_speed
+		FROM
+			cle_uav u
+		left join cle_dept d2 on d2.uuid=#{deptId}
+		left join cle_dept d on d.dept_code like CONCAT(d2.dept_code,'%')
+		left join p_uav_online uo on uo.uav_code=u.ecode
+		WHERE
+			u.data_status = '1' 
+			AND u.etype = '1'
+			and u.dept_id=d.uuid
+			<if test="uuid != null and uuid != ''">
+			and u.uuid=#{uuid}
+			</if>
+	</select>
+</mapper>

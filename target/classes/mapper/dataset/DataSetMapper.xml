@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.dataset.mapper.DataSetMapper">
+
+	<select id="getDataSetList" resultType="map">
+		SELECT
+			ds.uuid,
+			ds.`name` AS dataSetName,
+			ds.sql_content AS sqlContent,
+			ds.is_global as isGlobal,
+			pe.pname,
+			ds.operate_time AS operateTime,
+			sc.s_name AS sceneName,
+			se.d_name AS domainName,
+			t.t_name AS taskName
+		
+		FROM
+			p_data_set ds
+		LEFT JOIN cle_person pe ON ds.operate_by = pe.uuid
+		left join bot_collect_task t on t.uuid=ds.task_id
+		LEFT JOIN bot_collect_scene sc ON sc.uuid = t.scene_uuid
+		LEFT JOIN bot_collect_domain se ON se.uuid = sc.domain_uuid
+		WHERE
+			ds.data_status = '1'
+			and ((t.is_deleted=0 
+        and sc.is_deleted=0 
+        and se.is_deleted=0 ) or ds.is_global='1')
+		<if test="p.sceneId != null and p.sceneId !=''">
+			and sc.uuid in
+			<foreach collection="p.sceneId" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.domainId != null and p.domainId !=''">
+			and se.uuid in
+			<foreach collection="p.domainId" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.taskId != null and p.taskId !=''">
+			and t.uuid in
+			<foreach collection="p.taskId" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.name != null and p.name != ''">
+			And ds.`name` like CONCAT('%',#{p.name},'%')
+		</if>
+		<if test="p.operateBy != null and p.operateBy != ''">
+			And ds.operate_by = #{p.operateBy}
+		</if>
+		<if test="p.start != null and p.start != ''">
+			And DATE_FORMAT(ds.operate_time, '%Y-%m-%d') &gt;= #{p.start}
+		</if>
+		<if test="p.end != null and p.end != ''">
+			And DATE_FORMAT(ds.operate_time, '%Y-%m-%d') &lt;= #{p.end}
+		</if>
+		<if test="p.isGlobal != null and p.isGlobal != ''">
+			And ds.is_global = #{p.isGlobal}
+		</if>
+		ORDER BY ds.operate_time DESC
+	</select>
+	
+	<select id="getMetadata" resultType="map">
+		SELECT
+			field,
+			field_title AS fieldTitle,
+			field_type AS fieldType,
+			field_type_num AS fieldTypeNum,
+			field_type_num AS type
+		FROM
+			p_metadata
+		WHERE
+			data_status = '1'
+		AND set_id = #{uuid}
+		ORDER BY
+			sort ASC
+	</select>
+	
+	<select id="getMetadatas" resultType="map">
+		SELECT
+			field,
+			field_title AS fieldTitle
+		FROM
+			p_metadata
+		WHERE
+			data_status = '1'
+			AND field_title IS NOT NULL
+			AND field_title !=''
+		AND set_id = #{uuid}
+		ORDER BY
+			sort ASC
+	</select>
+	
+	<select id="getParamValue" resultType="String">
+		SELECT
+			uuid
+		FROM
+			p_warning_info
+		WHERE
+			data_status = '1'
+		LIMIT 0,10
+	</select>
+	
+	
+	<select id="treeDomainSceneTask" resultType="com.chinobot.aiuas.bot_collect.task.entity.vo.DomainSceneVo">
+	SELECT
+            d.uuid,
+            d.d_name AS `name`,
+            d.parent_uuid AS parentId,
+            'domain' AS `type`
+        FROM
+            bot_collect_domain d
+        WHERE
+            d.is_deleted = '0'
+        UNION ALL
+        SELECT
+            s.uuid,
+            s.s_name AS `name`,
+            s.domain_uuid AS parentId,
+            'scene' AS `type`
+        FROM
+            bot_collect_scene s
+        WHERE
+            s.is_deleted = '0'
+				UNION ALL
+        SELECT
+            t.uuid,
+            t.t_name AS `name`,
+            t.scene_uuid AS parentId,
+            'task' AS `type`
+        FROM
+            bot_collect_task t
+        WHERE
+            t.is_deleted = '0'
+        ORDER BY `name`;
+	</select>
+</mapper>

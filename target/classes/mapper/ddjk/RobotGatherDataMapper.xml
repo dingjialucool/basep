@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.ddjk.mapper.RobotGatherDataMapper">
+	<select id="getWarningList" resultType="map">
+	    SELECT
+	      rgd.operate_time as operateTime,
+	      rgd.warn_content as warnContent
+	    FROM
+	      cle_robot_gather_data rgd
+	      LEFT JOIN cle_task_xc tx
+	        ON rgd.task_uuid = tx.uuid
+	        AND tx.data_status = '1'
+	    WHERE rgd.operate_time IS NOT NULL
+	      AND rgd.warn_content IS NOT NULL
+	      AND LENGTH(rgd.warn_content) &gt; 0
+	      AND rgd.is_warning = '1'
+	    <if test="p.xcTime != null and p.xcTime != ''">
+	      AND tx.xc_time = #{p.xcTime}
+	      AND DATE_FORMAT(rgd.operate_time,'%Y-%m-%d') = #{p.xcTime} 
+	    </if>
+	    ORDER BY rgd.operate_time DESC
+        <if test="p.limit != null and p.limit != ''">
+          LIMIT #{p.limit}
+        </if>
+	</select>
+</mapper>

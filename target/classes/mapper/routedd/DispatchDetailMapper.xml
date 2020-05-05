@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.routedd.mapper.DispatchDetailMapper">
+    <select id="getDispatchUav" resultType="HashMap">
+		SELECT 
+			ud.*
+		FROM 
+			<if test="p.flyModule == 2">
+				p_dispatch_detail_path dd
+			</if>
+			<if test="p.flyModule == 3">
+				p_dispatch_detail_path dd
+			</if>
+			<if test="p.flyModule == 1">
+				p_dispatch_detail_route dd 
+			</if>
+			LEFT JOIN p_dispatch_detail dt ON dd.dspdt_id=dt.uuid
+			LEFT JOIN p_uav_dispatch ud ON dt.uav_dsp_id=ud.uuid 
+		WHERE 
+			dd.uuid=#{p.detailId}
+	</select>
+</mapper>

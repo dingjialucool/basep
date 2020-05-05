@@ -1,0 +1,374 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.routedd.mapper.UavDispatchMapper">
+
+    <select id="getAllUav" resultType="HashMap">
+	SELECT u.uuid,u.ename from cle_uav u
+	left join cle_dept d2 on d2.uuid=#{p.deptId}
+	left join cle_dept d on d.data_status='1' and d.dept_code like CONCAT(d2.dept_code,'%')
+	 where u.data_status='1' and u.etype='1' and u.dept_id=d.uuid
+	</select>
+    <select id="getUavDateState" resultType="HashMap">
+	SELECT DISTINCT
+		ud.time,
+		date_format(ud.time,'%Y-%m-%d') as date,
+		case when ud.time &lt; NOW() then 'mark2'
+		else 'mark1' end as className
+	FROM
+		p_uav_dispatch ud
+		LEFT JOIN p_dispatch_detail dd ON dd.uav_dsp_id = ud.uuid and dd.data_status = '1'
+	WHERE
+		ud.data_status = '1' 
+		AND dd.uuid IS NOT NULL 
+		AND ud.uav_id = #{uuid}
+		ORDER BY ud.time
+	</select>
+	<select id="getDateState" resultType="HashMap">
+		SELECT DISTINCT
+			ud.time,
+			date_format(ud.time,'%Y-%m-%d') as date,
+			case when ud.time &lt; NOW() then 'mark2'
+			else 'mark1' end as className
+		FROM
+			p_uav_dispatch ud
+			LEFT JOIN p_dispatch_detail dd ON dd.uav_dsp_id = ud.uuid and dd.data_status = '1'
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			left join cle_dept d on d.data_status='1' and d.dept_code like CONCAT(d2.dept_code,'%')
+		WHERE
+			ud.data_status = '1' 
+			AND dd.uuid IS NOT NULL 
+			<if test="p.deptId != null and p.deptId != ''">
+			and ud.dept_id=d.uuid
+			</if>
+			ORDER BY ud.time
+	</select>
+    <select id="getNotFlyPoints" resultType="HashMap">
+        SELECT
+        DISTINCT cp.uuid,cp.name, cp.address, u.ename, cp.longitude, cp.latitude
+        FROM
+        p_check_point cp
+        LEFT JOIN p_dispatch_detail dd ON dd.point_id = cp.uuid
+        AND dd.data_status = '1'
+        LEFT JOIN p_uav_dispatch ud on ud.uuid=dd.uav_dsp_id and ud.data_status='1' and ud.time=#{p.time}
+        LEFT join cle_uav u on u.uuid=ud.uav_id
+        where cp.data_status='1'
+        <if test="p.deptId != null and p.deptId != ''">
+            and cp.dept_id= #{p.deptId}
+        </if>
+        and ud.uav_id != #{p.uavId}
+        and ud.uav_id is not null
+    </select>
+    <select id="getFlyPoints" resultType="HashMap">
+        
+        SELECT
+         cp.uuid,
+        cp.name,
+        cp.address,
+        cp.longitude,
+        cp.latitude,
+        case 
+            when count(DISTINCT ud.uuid) >0 then '1' 
+            else '0' 
+        end as hasTask 
+    FROM
+        p_check_point cp 
+		left join
+        cle_dept d2 
+            on d2.uuid=#{p.deptId}
+    left join
+        cle_dept d 
+            on d.dept_code like CONCAT(d2.dept_code,'%')
+            and d.data_status='1'
+    left join
+        cle_dept d3 
+            on d3.dept_code like CONCAT(d2.dept_code,
+        '%') 
+        and d3.data_status='1'
+    LEFT JOIN
+        p_dispatch_detail dd 
+            on dd.point_id=cp.uuid 
+            and dd.data_status='1' 
+    LEFT JOIN
+        p_uav_dispatch ud 
+            on ud.uuid=dd.uav_dsp_id 
+            and ud.data_status='1' 
+					  and ud.dept_id=d3.uuid
+            and ud.time=#{p.time}
+    left join
+        p_route r 
+            on r.data_status='1' 
+            and r.check_point_id=cp.uuid 
+    left join
+        p_fly_area fa 
+            on fa.data_status='1' 
+            and fa.point_id=cp.uuid 
+    where
+        cp.data_status='1' 
+        and (
+            r.uuid is not null 
+            or fa.uuid is not null
+        ) 
+        AND cp.dept_id=d.uuid
+				GROUP BY cp.uuid,
+        cp.name,
+        cp.address,
+        cp.longitude,
+        cp.latitude
+    </select>
+    <select id="getRoutesOfPoint" resultType="HashMap">
+SELECT
+	r.uuid,
+	r.route_name,
+	r.fly_time,
+	r.building_num,
+	GROUP_CONCAT(fp.center ORDER BY rp.sort asc separator '#') as line
+FROM
+	p_route r 
+LEFT join p_route_point rp on rp.route_id=r.uuid and rp.data_status='1'
+LEFT join p_fixed_point fp on fp.uuid=rp.point_id
+WHERE
+	r.data_status = '1' 
+ 	AND r.check_point_id = #{uuid}
+	GROUP BY r.uuid,
+	r.route_name,
+	r.fly_time,
+	r.building_num
+</select>
+<!-- <select id="getRoutesOfPoint" resultType="HashMap">
+SELECT
+	r.uuid,
+	r.route_name,
+	r.fly_time,
+	r.building_num,
+	GROUP_CONCAT(ab.center ORDER BY rb.sort asc separator '#') as line
+FROM
+	p_route r 
+LEFT join p_route_building rb on rb.route_id=r.uuid and rb.data_status='1'
+LEFT join p_building b on b.uuid=rb.building_id
+LEFT join cle_address_base ab on ab.uuid=b.abs_id
+WHERE
+	r.data_status = '1' 
+	AND r.check_point_id = #{uuid}
+	GROUP BY r.uuid,
+	r.route_name,
+	r.fly_time,
+	r.building_num
+</select> -->
+    <select id="getDispatchDetail" resultType="HashMap">
+SELECT
+	dd.*,
+	cp.NAME pname,
+	cp.longitude,
+	cp.latitude,
+	cp.address 
+FROM
+	p_dispatch_detail dd
+	LEFT JOIN p_check_point cp ON cp.uuid = dd.point_id 
+WHERE
+	dd.data_status = '1'
+	and dd.uav_dsp_id = #{dspId}
+	ORDER BY dd.sort asc
+</select>
+
+    <select id="getPointByParam" resultType="map">
+        SELECT
+        cp.uuid AS pointId,
+        cp.name,
+        cp.longitude,
+        cp.latitude,
+        pdd.uuid AS dispatchDetailId,
+        pdd.distance,
+        pdd.get_time,
+        pdd.check_time,
+        pdd.event_num,
+        u.ename AS uavName,
+
+        (SELECT
+        COUNT(CASE WHEN b.status = '1' THEN 1 ELSE NULL END) AS s1
+        FROM
+        (SELECT * FROM
+        (SELECT pddr.status,pddr.dspdt_id FROM p_dispatch_detail_route pddr
+        UNION ALL
+        SELECT pddp.status,pddp.dspdt_id FROM p_dispatch_detail_path pddp
+        ) a
+        )b
+        WHERE b.dspdt_id = pdd.uuid
+        ) AS status1,
+        (SELECT
+        COUNT(CASE WHEN b.status = '2' THEN 1 ELSE NULL END) AS s1
+        FROM
+        (SELECT * FROM
+        (SELECT pddr.status,pddr.dspdt_id FROM p_dispatch_detail_route pddr
+        UNION ALL
+        SELECT pddp.status,pddp.dspdt_id FROM p_dispatch_detail_path pddp
+        ) a
+        )b
+        WHERE b.dspdt_id = pdd.uuid
+        ) AS status2,
+        (SELECT
+        COUNT(CASE WHEN b.status = '3' THEN 1 ELSE NULL END) AS s1
+        FROM
+        (SELECT * FROM
+        (SELECT pddr.status,pddr.dspdt_id FROM p_dispatch_detail_route pddr
+        UNION ALL
+        SELECT pddp.status,pddp.dspdt_id FROM p_dispatch_detail_path pddp
+        ) a
+        )b
+        WHERE b.dspdt_id = pdd.uuid
+        ) AS status3,
+        (SELECT
+        COUNT(CASE WHEN b.status = '4' THEN 1 ELSE NULL END) AS s1
+        FROM
+        (SELECT * FROM
+        (SELECT pddr.status,pddr.dspdt_id FROM p_dispatch_detail_route pddr
+        UNION ALL
+        SELECT pddp.status,pddp.dspdt_id FROM p_dispatch_detail_path pddp
+        ) a
+        )b
+        WHERE b.dspdt_id = pdd.uuid
+        ) AS status4
+
+
+        FROM
+        p_uav_dispatch ud
+        LEFT JOIN
+        p_dispatch_detail pdd
+        ON pdd.uav_dsp_id = ud.uuid
+        AND pdd.data_status = '1'
+        LEFT JOIN
+        p_check_point cp
+        ON cp.uuid = pdd.point_id
+        AND cp.data_status = '1'
+        LEFT JOIN
+        cle_uav u
+        ON ud.uav_id = u.uuid
+        AND u.data_status = '1'
+        WHERE
+        ud.data_status = '1'
+        <if test="p.flyPerson != null and p.flyPerson != ''">
+            AND ud.fly_person = #{p.flyPerson}
+        </if>
+        <if test="p.uavId != null and p.uavId != ''">
+            AND ud.uav_id = #{p.uavId}
+        </if>
+        <if test="p.time != null and p.time != ''">
+            AND DATE(ud.time) = DATE(#{p.time})
+        </if>
+        <if test="p.time == null or p.time == ''">
+            AND DATE(ud.time) = CURDATE()
+        </if>
+
+    </select>
+
+    <select id="getHistoryList" resultType="HashMap">
+        SELECT
+        ud.time, ud.event_num, u.ename, ud.uuid, ud.time_all, ud.route_name, ud.fly_person
+        FROM
+        p_uav_dispatch ud
+        LEFT JOIN p_dispatch_detail dd ON dd.uav_dsp_id = ud.uuid
+        AND dd.data_status = '1'
+        left join p_check_point cp on cp.uuid=dd.point_id
+        LEFT join cle_uav u on u.uuid=ud.uav_id
+        left join p_route r on r.data_status='1' and r.check_point_id=cp.uuid
+		left join p_fly_area fa on fa.data_status='1' and fa.point_id=cp.uuid
+		<if test="p.deptId != null and p.deptId != ''">
+        left join cle_dept d on d.uuid=ud.dept_id and d.data_status='1'
+		left join cle_dept d2 on d2.uuid=#{p.deptId}
+        </if>
+        WHERE
+        ud.data_status = '1'
+        and cp.data_status = '1'
+        and (r.uuid is not null or fa.uuid is not null)
+        and ud.time&lt; DATE_FORMAT(now(), '%Y-%m-%d')
+        <if test="p.deptId != null and p.deptId != ''">
+        <!-- and ud.dept_id=#{p.deptId} -->
+        AND d.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+        <if test="p.nameLike != null and p.nameLike != ''">
+            and ud.route_name like CONCAT('%', #{p.nameLike}, '%')
+        </if>
+        GROUP BY ud.time, ud.event_num, u.ename, ud.uuid, ud.time_all
+        
+        ORDER BY ud.time desc
+    </select>
+    <select id="getCollectList" resultType="HashMap">
+        SELECT
+        ud.time, ud.event_num, u.ename, ud.uuid, ud.time_all, ud.route_name, ud.fly_person
+        FROM
+        p_uav_dispatch ud
+        LEFT JOIN p_dispatch_detail dd ON dd.uav_dsp_id = ud.uuid
+        AND dd.data_status = '1'
+        left join p_check_point cp on cp.uuid=dd.point_id
+        left join p_route r on r.data_status='1' and r.check_point_id=cp.uuid
+		left join p_fly_area fa on fa.data_status='1' and fa.point_id=cp.uuid
+        LEFT join cle_uav u on u.uuid=ud.uav_id
+        LEFT join p_route_collect rc on rc.uav_dsp_id=ud.uuid and rc.data_status='1' and rc.user_id=#{p.userId}
+        WHERE
+        ud.data_status = '1'
+        and cp.data_status = '1'
+        and (r.uuid is not null or fa.uuid is not null)
+        and rc.uuid is not null
+        <if test="p.nameLike != null and p.nameLike != ''">
+            and ud.route_name like CONCAT('%', #{p.nameLike}, '%')
+        </if>
+        GROUP BY ud.time, ud.event_num, u.ename, ud.uuid, ud.time_all
+       
+        ORDER BY ud.time desc
+    </select>
+    <select id="getFlyAreaOfPoint" resultType="HashMap">
+	SELECT
+		fa.uuid,
+		fa.boundary,
+	  fa.rang_id,
+		r.name range_name,
+		ab.polyline,
+		sum(op2.time_include_point)+10 time_zs, -- 换电池10min
+		sum(op.time_include_point)+50 time_qx
+	FROM
+		p_fly_area fa 
+		left join p_range r on r.uuid=fa.rang_id
+		left join cle_address_base ab on ab.uuid=r.ab_id
+		LEFT join p_fly_path fp on fp.area_id=fa.uuid and fp.data_status='1'
+		LEFT join p_output_paramter op on op.path_id=fp.uuid
+		LEFT join p_output_paramter op2 on op2.path_id=fp.uuid and fp.path_type='1'
+	WHERE
+		fa.data_status = '1' 
+		AND fa.point_id = #{uuid}
+		GROUP BY 
+		fa.uuid,
+		fa.boundary,
+	  fa.rang_id,
+		r.name,
+		ab.polyline
+		
+	</select>
+	<select id="getTimeById" resultType="String">
+	SELECT DATE_FORMAT(time, '%Y-%m-%d') from p_uav_dispatch ud where ud.uuid=#{uuid}
+	</select>
+	<select id="getRouteListByDate" resultType="com.chinobot.plep.home.routedd.entity.UavDispatch">
+	SELECT ud.* from p_uav_dispatch ud
+	left join cle_dept d on d.uuid=ud.dept_id and d.data_status='1'
+	left join cle_dept d2 on d2.uuid=#{p.deptId}
+	where ud.data_status='1'
+	AND d.dept_code like CONCAT(d2.dept_code,'%')
+	and ud.time=#{p.date}
+	ORDER BY ud.operate_time desc
+	</select>
+
+    <select id="getUavByFlyPerson" resultType="java.util.Map">
+        SELECT
+          u.uuid,
+          u.ecode,
+          u.ename
+        FROM
+          p_uav_dispatch ud
+          LEFT JOIN cle_uav u
+            ON u.uuid = ud.uav_id
+            AND u.data_status = '1'
+        WHERE ud.data_status = '1'
+          AND u.data_status = '1'
+          AND ud.fly_person = #{pid}
+          AND DATE(ud.time) = CURDATE()
+        GROUP BY ud.uav_id
+    </select>
+</mapper>

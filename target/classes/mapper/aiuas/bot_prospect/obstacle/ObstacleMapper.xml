@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_prospect.obstacle.mapper.ObstacleMapper">
+
+	<resultMap
+		type="com.chinobot.aiuas.bot_prospect.obstacle.entity.dto.ObstacleAndGeographyDTO"
+		id="obstacleMap">
+
+		<association property="obstacleDTO"
+			javaType="com.chinobot.aiuas.bot_prospect.obstacle.entity.dto.ObstacleDTO">
+			<id column="uuid" property="uuid" />
+			<result column="obstacle_name" property="obstacleName" />
+			<result column="remark" property="remark" />
+			<result column="obstacle_altitude" property="obstacleAltitude" />
+			<result column="obstacle_height" property="obstacleHeight" />
+			<result column="o_address" property="oAddress" />
+			<result column="typeName" property="typeName" />
+			<result column="icon" property="icon" />
+		</association>
+		<association property="geography"
+			javaType="com.chinobot.aiuas.bot_collect.info.entity.dto.GeographyDTO">
+			<id column="geographyId" property="geographyId" />
+			<result column="lng" property="lng" />
+			<result column="lat" property="lat" />
+			<result column="lnglats" property="lnglats" />
+		</association>
+
+	</resultMap>
+
+    <select id="getList"
+            resultType="com.chinobot.aiuas.bot_prospect.obstacle.entity.vo.ObstacleVo">
+		SELECT
+		  o.uuid,
+		  o.obstacle_name AS `name`,
+		  CONCAT(g.lng, ',', g.lat) AS center,
+		  o.obstacle_type AS parentId,
+		  ot.icon,
+		  ot.o_name as typeName,
+		  o.obstacle_height as height,
+		  o.obstacle_altitude as altitude,
+		  o.o_address as address
+		FROM
+		  bot_prospect_obstacle o
+		  LEFT JOIN bot_prospect_obstacle_type ot
+			ON ot.uuid = o.obstacle_type
+			AND ot.is_deleted = '0'
+		  LEFT JOIN bot_collect_geography g
+			ON g.busi_id = o.uuid
+		WHERE o.is_deleted = '0'
+		  AND g.is_deleted = '0'
+		UNION
+		ALL
+		SELECT
+		  ot.uuid,
+		  ot.o_name AS `name`,
+		  NULL AS center,
+		  '1' AS parentId,
+		  ot.icon,
+		  ot.o_name as typeName,
+		  null as height,
+		  null as altitude,
+		  null as address
+		FROM
+		  bot_prospect_obstacle_type ot
+		WHERE ot.is_deleted = '0'
+    </select>
+    
+    <!-- 获取树形障碍物 -->
+    <select id="getTreeObstacle" resultType="com.chinobot.aiuas.bot_prospect.obstacle.entity.vo.ObstacleAndTypeVo">
+    	SELECT
+			a.id,
+			a.`NAME` as title,
+			a.parentUuid,
+			a.type
+		FROM
+			(
+				SELECT
+					uuid AS id,
+					o_name AS NAME,
+					'0' AS parentUuid,
+					'1' AS type,
+					create_time
+				FROM
+					bot_prospect_obstacle_type
+				WHERE
+					is_deleted = '0'
+				UNION ALL
+					SELECT
+						po.uuid AS id,
+						po.obstacle_name AS NAME,
+						po.obstacle_type AS parentUuid,
+						'2' AS type,
+						po.create_time
+					FROM
+						bot_prospect_obstacle po
+					WHERE
+						po.is_deleted = '0'
+			) a
+			Where 1 = 1
+		<if test="name != null and name != ''">
+			And a.`NAME` LIKE CONCAT('%',#{name},'%')
+		</if>
+		ORDER BY
+		a.create_time DESC
+    </select>
+    
+    <!-- 回显障碍物类型 -->
+    <select id="getObstacleType" resultType="com.chinobot.aiuas.bot_prospect.obstacle.entity.dto.ObstacleTypeDTO">
+    	SELECT
+			uuid,
+			o_name AS typeName,
+			icon
+		FROM
+			bot_prospect_obstacle_type
+		WHERE
+			uuid = #{typeId}
+    </select>
+    
+    <!-- 回显障碍物 -->
+    <select id="getObstacle" resultMap="obstacleMap">
+    	
+    	SELECT
+			bo.uuid,
+			bo.obstacle_name,
+			bo.remark,
+			bo.obstacle_altitude,
+			bo.obstacle_height,
+			bo.o_address,
+			ot.o_name AS typeName,
+			ot.icon,
+			go.uuid AS geographyId,
+			go.lng,
+			go.lat,
+			go.lnglats
+		FROM
+			bot_prospect_obstacle bo
+		LEFT JOIN bot_prospect_obstacle_type ot
+			ON ot.uuid = bo.obstacle_type
+			AND ot.is_deleted = '0'
+		LEFT JOIN bot_collect_geography go ON go.busi_id = bo.uuid
+		AND go.is_deleted = '0'
+		AND go.busi_type = 'bot_prospect_obstacle'
+		WHERE
+			bo.uuid = #{uuid}
+    
+    </select>
+    
+    <!-- 复选框障碍物多边形 -->
+    <select id="checkedObstacletPolygon" resultType="com.chinobot.aiuas.bot_prospect.obstacle.entity.vo.ObstacletPolygon">
+    	
+    	SELECT
+			bo.uuid AS obstacleId,
+			bo.obstacle_name AS obstacleName,
+			go.lnglats
+		FROM
+			bot_prospect_obstacle bo
+		LEFT JOIN bot_collect_geography go ON go.busi_id = bo.uuid
+		AND go.busi_type = 'bot_prospect_obstacle'
+		WHERE
+			bo.is_deleted = '0'
+		AND go.is_deleted = '0' AND go.lnglats IS NOT NULL
+		<if test="obstacleList.size > 0">
+			AND bo.uuid in
+			<foreach collection="obstacleList" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+    
+    </select>
+    
+    <!-- 复选框障碍物多边形 根据障碍物类型-->
+    <select id="checkedObstacletOfTypePolygon" resultType="com.chinobot.aiuas.bot_prospect.obstacle.entity.vo.ObstacletPolygon">
+    	
+    	SELECT
+			bo.uuid AS obstacleId,
+			bo.obstacle_name AS obstacleName,
+			go.lnglats
+		FROM
+			bot_prospect_obstacle bo
+		LEFT JOIN bot_collect_geography go ON go.busi_id = bo.uuid
+		AND go.busi_type = 'bot_prospect_obstacle'
+		WHERE
+			bo.is_deleted = '0'
+		AND go.is_deleted = '0' AND go.lnglats IS NOT NULL
+		<if test="typeList.size > 0">
+			AND bo.obstacle_type in
+			<foreach collection="typeList" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+    
+    </select>
+    
+    <!-- 获取所有的障碍物类型 -->
+    <select id="getAllObstacleType" resultType="com.chinobot.aiuas.bot_prospect.obstacle.entity.dto.ObstacleTypeDTO">
+    	SELECT
+			uuid,
+			o_name AS typeName,
+			icon
+		FROM
+			bot_prospect_obstacle_type
+		WHERE
+			is_deleted = '0'
+    </select>
+    
+    <!-- 获取障碍物类型下的所有障碍物 -->
+    <select id="getAllObstacleByType" resultType="com.chinobot.aiuas.bot_prospect.obstacle.entity.vo.ObstacleAndObstacleTypeVo">
+    	SELECT
+			bo.uuid,
+			bo.obstacle_name AS obstacleName,
+			bo.obstacle_altitude obstacleAltitude,
+			bo.obstacle_height obstacleHeight,
+			bo.o_address address,
+			go.lng,
+			go.lat,
+			go.lnglats,
+			t.icon
+		FROM
+			bot_prospect_obstacle_type t
+		LEFT JOIN bot_prospect_obstacle bo ON bo.obstacle_type = t.uuid
+		LEFT JOIN bot_collect_geography go ON go.busi_id = bo.uuid
+		AND go.is_deleted = '0'
+		AND go.busi_type = 'bot_prospect_obstacle'
+		WHERE
+			bo.is_deleted = '0' 
+		<if test="p.typeId != null and p.typeId != ''">
+            AND t.uuid = #{p.typeId}
+        </if>
+        <if test="p.latMin != null and p.latMin != ''">
+			and go.lat &gt;= #{p.latMin}
+		</if>
+		<if test="p.latMax != null and p.latMax != ''">
+			and go.lat &lt;= #{p.latMax}
+		</if>
+		<if test="p.lngMin != null and p.lngMin != ''">
+			and go.lng &gt;= #{p.lngMin}
+		</if>
+		<if test="p.lngMax != null and p.lngMax != ''">
+			and go.lng &lt;= #{p.lngMax}
+		</if>
+        
+    </select>
+    
+</mapper>

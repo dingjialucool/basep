@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.base.mapper.GeographyMapper">
+	<select id="getMaxSort" resultType="long">
+	
+		SELECT
+			IFNULL(MAX(sort), 0) AS sort
+		FROM
+			bot_collect_geography
+		WHERE
+			is_deleted = '0'
+		AND busi_type = #{busiType}
+	</select>
+</mapper>

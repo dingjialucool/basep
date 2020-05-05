@@ -1,0 +1,487 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.point.mapper.FixedPointMapper">
+	
+	<resultMap type="com.chinobot.plep.home.point.entity.vo.FixedPointVo" id="FixedPointResultMap">
+		<id column="uuid" property="uuid"/>
+		<result column="name" property="name"/>
+		<result column="center" property="center"/>
+		<result column="address" property="address"/>
+		<result column="need_plan" property="need_plan"/>
+		<result column="polygon" property="polygon"/>
+		<result column="dept_id" property="dept_id"/>
+		<collection property="flyPoints" ofType="com.chinobot.plep.home.point.entity.FixedFlyPoint" >
+			<id column="fly_point_id" property="uuid"/>
+			<result column="lnglat" property="center"/>
+			<result column="sort" property="sort"/>
+			<result column="height" property="height"/>
+			<result column="fly_angle" property="flyAngle"/>
+			<result column="camera_angle" property="cameraAngle"/>
+		</collection>
+	</resultMap>
+	<select id="getAllPoint" resultMap="FixedPointResultMap">
+	SELECT
+		fp.uuid,
+		fp.name,
+		fp.center,
+		fp.address,
+		case when s2.count is null 
+		then '1' else '0' end as need_plan,
+		fp.polygon,
+		fp.dept_id,
+		pfp.center lnglat,
+		pfp.uuid fly_point_id,
+		pfp.sort,
+		pfp.height,
+		pfp.fly_angle,
+		pfp.camera_angle
+	FROM
+		p_fixed_point fp
+		left join p_fixed_fly_point pfp on pfp.data_status='1' and pfp.fixed_id=fp.uuid
+		LEFT JOIN ( SELECT rp.point_id, count( * ) AS count FROM p_route_point rp WHERE rp.data_status = '1' GROUP BY rp.point_id ) s2 ON s2.point_id = fp.uuid
+		<if test="p.deptId != null and p.deptId != ''">
+		left join cle_dept d on d.uuid=fp.dept_id and d.data_status='1'
+		left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if>
+	WHERE
+		fp.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+		<!-- and fp.dept_id=#{p.deptId} -->
+		AND d.dept_code like CONCAT(d2.dept_code,'%')
+		</if>
+		<if test="p.nameLike != null and p.nameLike != ''">
+		AND fp.name like CONCAT('%', #{p.nameLike},'%')
+		</if>
+		order by fp.uuid asc, pfp.sort asc
+	</select>
+	<select id="getAllPointBak" resultType="HashMap">
+	SELECT
+		fp.uuid,
+		fp.name,
+		fp.center,
+		fp.address,
+		case when s2.count is null 
+		then '1' else '0' end as need_plan,
+		fp.polygon,
+		fp.dept_id
+	FROM
+		p_fixed_point fp
+		LEFT JOIN ( SELECT rp.point_id, count( * ) AS count FROM p_route_point rp WHERE rp.data_status = '1' GROUP BY rp.point_id ) s2 ON s2.point_id = fp.uuid
+		<if test="p.deptId != null and p.deptId != ''">
+		left join cle_dept d on d.uuid=fp.dept_id and d.data_status='1'
+		left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if>
+	WHERE
+		fp.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+		<!-- and fp.dept_id=#{p.deptId} -->
+		AND d.dept_code like CONCAT(d2.dept_code,'%')
+		</if>
+		<if test="p.nameLike != null and p.nameLike != ''">
+		AND fp.name like CONCAT('%', #{p.nameLike},'%')
+		</if>
+	</select>
+	<select id="getRangePoint" resultType="HashMap">
+		SELECT 
+			*,st_distance(point(#{p.lng}, #{p.lat}),point(SUBSTRING_INDEX(center,',',1),SUBSTRING_INDEX(center,',',-1)))*111195 as re 
+		FROM 
+			p_fixed_point 
+		WHERE
+			data_status='1' AND
+		 	st_distance(point(#{p.lng}, #{p.lat}),point(SUBSTRING_INDEX(center,',',1),SUBSTRING_INDEX(center,',',-1)))*111195 &lt;= #{p.range} 
+		ORDER BY 
+			re ASC
+		LIMIT 1
+	</select>
+	
+	<select id="getFlyLinePointImg" resultType="HashMap">
+		<!-- SELECT 
+			fp.*,
+			fb.file_id,
+			IF(fb.file_id IS NULL, '0', '1') as isBasic
+		FROM 
+			p_dispatch_detail_route dr
+			LEFT JOIN p_route_point rp ON dr.route_id=rp.route_id
+			LEFT JOIN p_fixed_point fp ON rp.point_id=fp.uuid
+			LEFT JOIN cb_file_bus fb ON fp.uuid=fb.bus_id AND fb.data_status=1 AND fb.module='basic_img'
+		WHERE 
+			dr.uuid=#{p.uuid} -->
+			SELECT 
+			rp.point_id uuid,
+			IF(COUNT(DISTINCT fb.file_id)=COUNT(DISTINCT ffp.uuid), '1', '0') as isBasic
+		FROM 
+			p_dispatch_detail_route dr
+			LEFT JOIN p_route_point rp ON dr.route_id=rp.route_id and rp.data_status='1'
+			left join p_fixed_fly_point ffp on ffp.fixed_id=rp.point_id and ffp.data_status='1'
+			LEFT JOIN cb_file_bus fb ON ffp.uuid=fb.bus_id AND fb.data_status=1 AND fb.module='basic_img'
+		 WHERE 
+		 dr.uuid=#{p.uuid}
+			GROUP BY rp.uuid
+	</select>
+	
+	<select id="getPointPage" resultType="HashMap">
+		SELECT
+			*
+		FROM
+			(
+				SELECT
+					fp.uuid,
+					fp. NAME AS pointName,
+					fp.center,
+					fp.address,
+					fp.polygon,
+					cp.pname AS pname,
+					bus.file_id,
+					b.scene_name AS sceneName,
+					b.`code`,
+					IFNULL(ss.flyNum, 0) AS flyNum,
+					rt.route_name,
+					d.dept_code AS depta,
+					d2.dept_code AS deptb,
+					fp.create_time,
+		
+				IF (
+					cc.basicNum = dd.ffpNum,
+					'1',
+					'0'
+				) AS isHaveBasic
+				FROM
+					p_fixed_point fp
+				LEFT JOIN p_route_point rpt ON rpt.point_id = fp.uuid
+				LEFT JOIN p_route rt ON rt.uuid = rpt.route_id
+				LEFT JOIN p_fixed_fly_point ffp ON ffp.fixed_id = fp.uuid
+				AND ffp.sort = '1'
+				LEFT JOIN cb_file_bus bus ON bus.data_status = '1'
+				AND ffp.uuid = bus.bus_id
+				AND bus.module = 'basic_img'
+				LEFT JOIN cle_person cp ON fp.assign_id = cp.uuid
+				LEFT JOIN (
+					SELECT
+						po.uuid,
+						COUNT(bus.file_id) AS flyNum
+					FROM
+						p_fixed_point po
+					LEFT JOIN p_fixed_fly_point ffp ON po.uuid = ffp.fixed_id
+					LEFT JOIN cb_file_bus bus ON ffp.uuid = bus.bus_id
+					AND bus.module = 'fly_img'
+					WHERE
+						bus.data_status = '1'
+					AND ffp.data_status = '1'
+					GROUP BY
+						po.uuid
+				) ss ON ss.uuid = fp.uuid
+				LEFT JOIN (
+					SELECT
+						po.uuid,
+						COUNT(bus.file_id) AS basicNum
+					FROM
+						p_fixed_point po
+					LEFT JOIN p_fixed_fly_point ffp ON po.uuid = ffp.fixed_id
+					LEFT JOIN cb_file_bus bus ON ffp.uuid = bus.bus_id
+					AND bus.module = 'basic_img'
+					WHERE
+						bus.data_status = '1'
+					AND ffp.data_status = '1'
+					GROUP BY
+						po.uuid
+				) cc ON cc.uuid = fp.uuid
+				LEFT JOIN (
+					SELECT
+						po.uuid,
+						COUNT(ffp.uuid) AS ffpNum
+					FROM
+						p_fixed_point po
+					LEFT JOIN p_fixed_fly_point ffp ON po.uuid = ffp.fixed_id
+					WHERE
+						ffp.data_status = '1'
+					GROUP BY
+						po.uuid
+				) dd ON dd.uuid = fp.uuid
+				LEFT JOIN (
+					SELECT
+						c.uuid,
+						GROUP_CONCAT(DISTINCT e.`code`) AS `code`,
+						GROUP_CONCAT(DISTINCT e. NAME) AS scene_name
+					FROM
+						p_fixed_point c
+					LEFT JOIN p_scene_point sp ON sp.point_id = c.uuid
+					LEFT JOIN p_scene s ON sp.scene_id = s.uuid
+					LEFT JOIN p_scene e ON e.uuid = s.parent_id
+					WHERE
+						c.`data_status` = '1'
+					GROUP BY
+						c.uuid
+				) b ON fp.uuid = b.uuid
+		
+					LEFT JOIN cle_dept d ON d.uuid = fp.dept_id
+					<if test="p.deptId != null and p.deptId != ''">
+					left join cle_dept d2 on d2.uuid=#{p.deptId}
+					</if>
+					WHERE
+						fp.data_status = '1' AND ffp.data_status = '1'
+				) aa	
+			WHERE
+				1=1
+			<if test="p.deptId != null and p.deptId != ''">
+				 AND aa.depta  like CONCAT(aa.deptb,'%') 
+			</if>
+			<if test="p.heightMin != null and p.heightMin != ''">
+            	and aa.flyNum &gt;= CAST(#{p.heightMin} AS SIGNED)
+	        </if>
+	        <if test="p.heightMax != null and p.heightMax != ''">
+	            and aa.flyNum &lt;= CAST(#{p.heightMax} AS SIGNED)
+	        </if>
+			<if test="p.name != null and p.name != ''">
+				AND aa.pointName like CONCAT('%',#{p.name},'%')
+			</if>
+			<if test="p.routeName != null and p.routeName != ''">
+				AND aa.route_name like CONCAT('%',#{p.routeName},'%')
+			</if>
+			<if test="p.address != null and p.address != ''">
+				AND aa.address like CONCAT('%',#{p.address},'%')
+			</if>
+			<if test="p.assignId != null and p.assignId != ''">
+				AND aa.assign_id=#{p.assignId}
+			</if> 
+			<if test="p.domain != null and p.domain !=''">
+			    and  
+	     		<foreach collection="p.domain" item="type" index="index"  
+		            separator="or">  
+		          	aa.`code`  like CONCAT('%',#{type},'%')   
+		       	</foreach>    	
+        	</if>
+        	<if test="p.isHaveBasic != null and p.isHaveBasic !=''">
+			    and aa.isHaveBasic  in 
+        		    <foreach collection="p.isHaveBasic" item="type" index="index"  
+			           open="(" close=")" separator=",">  
+			           #{type}  
+			       	</foreach>   	
+        	</if>
+        ORDER BY aa.create_time	DESC,aa.pointName  ASC
+	</select>
+	
+	<select id="getAllPointNoPage" resultType="HashMap">
+		SELECT
+			po.uuid
+		FROM
+			p_fixed_point po
+		LEFT JOIN cle_dept d ON d.uuid = po.dept_id
+		<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if>
+		WHERE
+			po.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+			AND d.dept_code  like CONCAT(d2.dept_code,'%') 
+		</if>
+		ORDER BY
+			po.create_time DESC,
+			po.`name` ASC
+	</select>
+	
+	
+	<select id="getAllRouteLine" resultType="HashMap">
+	SELECT
+	r.route_name,
+	rp.route_id,
+	r.check_point_id,
+	CONCAT(cp.longitude,',',cp.latitude,';',GROUP_CONCAT(fp.center ORDER BY rp.sort asc SEPARATOR ';')) as line
+FROM
+	p_route r
+	LEFT JOIN p_route_point rp on rp.route_id=r.uuid
+	LEFT JOIN p_fixed_point fp ON fp.uuid = rp.point_id
+	left join p_check_point cp on r.check_point_id=cp.uuid
+WHERE
+	r.data_status='1'
+	and rp.data_status = '1'
+	<if test="p.deptId != null and p.deptId != ''">
+         and r.dept_id = #{p.deptId}
+     </if>
+	GROUP BY r.route_name,rp.route_id,r.check_point_id,cp.longitude,cp.latitude
+	</select>
+	<select id="getRouteLine" resultType="HashMap">
+	SELECT
+	fp.name,
+	fp.center,
+	fp.polygon
+FROM
+	p_route_point rp
+	LEFT JOIN p_fixed_point fp ON fp.uuid = rp.point_id
+WHERE
+	rp.data_status = '1' 
+  AND rp.route_id = #{uuid}
+	ORDER BY rp.sort
+	</select>
+	
+	<select id="getFixPointCount" resultType="map">
+		SELECT
+			COUNT(po.uuid) AS pointCount
+		FROM
+			p_fixed_point po
+		left join cle_dept d  on d.uuid = po.dept_id
+		<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid = #{p.deptId}
+		</if>
+		WHERE
+			po.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+            AND d.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+	</select>
+	
+	<select id="getFixPointCounts" resultType="map">
+		SELECT
+			COUNT(po.uuid) AS pointCount
+		FROM
+			p_fixed_point po
+		LEFT JOIN p_route_point rp ON rp.point_id = po.uuid
+		left join cle_dept d  on d.uuid = po.dept_id
+		<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid = #{p.deptId}
+		</if>
+		WHERE
+			po.data_status = '1' AND rp.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+            AND d.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+	</select>
+	
+	<select id="getCountOfLine" resultType="map">
+			SELECT
+				count(r.uuid) AS lineCount
+			FROM
+				p_route r
+			LEFT JOIN p_check_point cp ON r.check_point_id = cp.uuid
+			LEFT JOIN (
+				SELECT
+					a.uuid,
+					GROUP_CONCAT(DISTINCT s.uuid) as sceneId,
+					GROUP_CONCAT(DISTINCT s.parent_id) as parent_id
+				FROM
+					p_route a
+				LEFT JOIN p_route_point b ON a.uuid = b.route_id
+				LEFT JOIN p_fixed_point c ON b.point_id = c.uuid
+				LEFT JOIN p_scene_point sp ON sp.point_id = c.uuid
+				LEFT JOIN p_scene s ON sp.scene_id = s.uuid
+				WHERE
+					a.`data_status` = '1'
+				GROUP BY
+					a.uuid
+			) b ON r.uuid = b.uuid
+			left join cle_dept d  on d.uuid = r.dept_id
+			<if test="p.deptId != null and p.deptId != ''">
+				left join cle_dept d2 on d2.uuid = #{p.deptId}
+			</if>
+			where r.`data_status` = '1'
+			AND b.parent_id = #{p.domainId}
+			<if test="p.sceneId != null and p.sceneId != ''">
+				AND b.sceneId = #{p.sceneId}
+			</if>
+			<if test="p.deptId != null and p.deptId != ''">
+	            AND d.dept_code like CONCAT(d2.dept_code,'%')
+	        </if>
+	</select>
+	
+	<select id="getCountOfLineWithPoint" resultType="map">
+			SELECT
+				count(r.uuid) AS lineCount
+			FROM
+				p_route r
+			left join cle_dept d  on d.uuid = r.dept_id
+			<if test="p.deptId != null and p.deptId != ''">
+				left join cle_dept d2 on d2.uuid = #{p.deptId}
+			</if>
+			where r.`data_status` = '1' 
+			<if test="p.deptId != null and p.deptId != ''">
+	            AND d.dept_code like CONCAT(d2.dept_code,'%')
+	        </if>
+	</select>
+	
+	<select id="getPointInfo" resultType="map">
+			SELECT
+				DISTINCT po.*,
+				e.`code` as scene_id
+			FROM
+				p_fixed_point po
+			LEFT JOIN p_scene_point sp ON sp.point_id = po.uuid
+			LEFT JOIN p_scene sc ON sp.scene_id = sc.uuid
+			LEFT JOIN p_scene e ON sc.parent_id = e.uuid
+			WHERE
+				po.data_status = '1'
+			
+			AND po.uuid = #{p.uuid}
+	</select>
+	
+	<!-- 获取某个定点的所有飞行图 -->
+	<select id="getFlyImgList" resultType="com.chinobot.plep.home.point.entity.vo.FlyPointVo">
+	   SELECT
+		  fb.file_id AS fileId,
+		  DATE_FORMAT(f.create_time, '%Y-%m-%d')  as flyTime
+	   FROM cb_file_bus fb
+		  left join cb_upload_file f on f.uuid=fb.file_id
+	   WHERE fb.data_status = '1'
+		  AND fb.bus_id = #{p.busId}
+        <if test="p.module != null and p.module != ''">
+          AND fb.module = #{p.module}
+        </if>
+        ORDER BY f.create_time DESC,
+        	f.origin_name ASC
+	</select>
+	
+	<!-- 获取某个定点的所有飞行图 -->
+	<select id="getFlyImgToZip" resultType="map">
+	   SELECT
+		  fb.file_id AS fileId,
+		  f.origin_name as name,
+		  f.path as path,
+		  DATE_FORMAT(f.create_time, '%Y-%m-%d')  as flyTime
+	   FROM p_fixed_fly_point ffp
+	   left join p_fixed_point fp on fp.uuid = ffp.fixed_id
+	   left join cb_file_bus fb on ffp.uuid = fb.bus_id
+	   left join cb_upload_file f on f.uuid=fb.file_id
+	   WHERE fb.data_status = '1'
+		  AND ffp.fixed_id = #{p.busId}
+        <if test="p.module != null and p.module != ''">
+          AND fb.module = #{p.module}
+        </if>
+        <if test="p.start != null and p.start != ''">
+			and DATE_FORMAT(f.create_time, '%Y-%m-%d') &gt;= #{p.start}
+		</if>
+		<if test="p.end != null and p.end != ''">
+			and DATE_FORMAT(f.create_time, '%Y-%m-%d') &lt;= #{p.end}
+		</if>
+        ORDER BY f.create_time DESC
+	</select>
+	
+	<!-- 获取某个定点的所有飞行图(没有分页) -->
+	<select id="getFlyImgListNoPage" resultType="map">
+	   SELECT
+		  fb.file_id AS fileId,
+		  f.origin_name as name	  
+	   FROM cb_file_bus fb
+		  left join cb_upload_file f on f.uuid=fb.file_id
+	   WHERE fb.data_status = '1'
+		  AND fb.bus_id = #{p.pointId}
+          AND fb.module = 'fly_img'
+        ORDER BY f.create_time DESC,f.origin_name ASC
+	</select>
+	
+	<!-- 获取某个定点下所有航点的基准图 -->
+	<select id="getBasicImgList" resultType="map">
+	   SELECT
+			fb.file_id AS fileId,
+			fp.sort,
+			fp.uuid AS busId
+		FROM
+			p_fixed_fly_point fp
+		LEFT JOIN cb_file_bus fb ON fp.uuid = fb.bus_id
+		AND fb.data_status = '1'
+		AND fb.module = 'basic_img'
+		WHERE
+			fp.data_status = '1'
+		AND fp.fixed_id = #{uuid}
+		ORDER BY
+	fp.sort ASC
+	</select>
+	
+</mapper>

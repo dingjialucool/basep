@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.ddjk.mapper.TaskEquipmentDispatchMapper">
+
+    <delete id="deleteUavDispatch">
+        DELETE
+            FROM cle_task_equipment_dispatch
+            WHERE task_id=#{taskId} AND equipment_id IN(
+            SELECT uuid
+            FROM cle_uav )
+
+    </delete>
+    <select id="getUavTaskScene" resultType="map">
+        SELECT
+          tx.uuid AS taskId,
+		  s.uuid AS sceneId,
+		  s.sname,
+		  s.address,
+		  s.stype,
+		  s.bus_type as busType,
+		  f.path,
+		  f.fileId,
+		  rf.longitude,
+		  rf.latitude
+		FROM
+		  cle_task_equipment_dispatch ted
+		  LEFT JOIN cle_task_xc tx
+		    ON ted.task_id = tx.uuid
+		  LEFT JOIN cle_scene s
+		    ON tx.ref_slience = s.uuid
+          LEFT JOIN
+            (SELECT
+              uf.uuid as fileId,
+              uf.path,
+              fb.bus_id
+            FROM
+              cb_upload_file uf
+              LEFT JOIN cb_file_bus fb
+                ON uf.uuid = fb.file_id
+            WHERE fb.sort = '1'
+              AND fb.module = 'scene_album') f
+            ON f.bus_id = s.uuid
+          LEFT JOIN
+		    (SELECT
+		      task_uuid,
+		      MAX(longitude) AS longitude,
+		      MAX(latitude) AS latitude
+		    FROM
+		      cle_robot_flight
+		    WHERE location_type = '1'
+		    GROUP BY task_uuid) rf
+		    ON rf.task_uuid = tx.uuid
+		WHERE ted.task_id &lt;&gt; ''
+		  AND tx.data_status = '1'
+		  AND s.data_status = '1'
+		<if test="p.uavId != null and p.uavId != ''">
+		  AND ted.equipment_id = #{p.uavId}
+		</if>
+		<if test="p.completed == 1">
+		  AND tx.task_status = '4'
+		</if>
+		<if test="p.completed == 0">
+		  AND tx.task_status &lt;&gt; '4'
+		</if>
+		<if test="p.sname != null and p.sname != ''">
+		  AND s.sname LIKE CONCAT('%', #{p.sname}, '%')
+		</if>
+    </select>
+</mapper>

@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper
+	namespace="com.chinobot.aiuas.bot_collect.info.mapper.InfoMapper">
+
+	<resultMap
+		type="com.chinobot.aiuas.bot_collect.info.entity.dto.CollectObjectAndGeoWithStringDTO"
+		id="collectObjectMap">
+
+		<result column="tagNames" property="tagNames" />
+		<result column="fileIds" property="fileIds" />
+		<result column="parentLnglats" property="parentLnglats" />
+		<association property="coAddress"
+			javaType="com.chinobot.aiuas.bot_collect.info.entity.dto.CollectObjectWithAddressDTO">
+			<id column="uuid" property="uuid" />
+			<result column="o_name" property="oName" />
+			<result column="parent_uuid" property="parentUuid" />
+			<result column="o_address" property="oAddress" />
+			<result column="o_desc" property="oDesc" />
+			<result column="address_area_code" property="addressAreaCode" />
+			<result column="domain_uuid" property="domainUuid" />
+			<result column="collect_code" property="collectCode" />
+		</association>
+		<association property="geography"
+			javaType="com.chinobot.aiuas.bot_collect.info.entity.dto.GeographyDTO">
+			<id column="geographyId" property="geographyId" />
+			<result column="lng" property="lng" />
+			<result column="lat" property="lat" />
+			<result column="lnglats" property="lnglats" />
+		</association>
+
+	</resultMap>
+
+
+	<select id="getTreeObject"
+		resultType="com.chinobot.aiuas.bot_collect.info.entity.dto.CollectObjectDTO">
+
+		SELECT
+		a.uuid AS id,
+		a.`NAME` AS title,
+		IFNULL(a.parentId, '') AS parentUuid,
+		a.type,
+		IFNULL(a.lnglats, '') AS lnglats
+		FROM
+		(
+		SELECT
+		dom.uuid,
+		dom.d_name AS NAME,
+		dom.parent_uuid AS parentId,
+		'1' AS type,
+		dom.create_time,
+		'' AS lnglats
+		FROM
+		bot_collect_domain dom
+		WHERE
+		dom.is_deleted = '0'
+		UNION ALL
+		SELECT
+		ci.uuid,
+		ci.o_name AS NAME,
+		IFNULL(
+		ci.parent_uuid,
+		ci.domain_uuid
+		) AS parentId,
+		'2' AS type,
+		ci.create_time,
+		cogy.lnglats AS lnglats
+		FROM
+		bot_collect_info ci
+		LEFT JOIN bot_collect_domain bcd ON ci.domain_uuid = bcd.uuid
+		LEFT JOIN bot_collect_geography cogy ON cogy.busi_id = ci.uuid
+		AND cogy.busi_type = 'bot_collect_info'
+		AND cogy.is_deleted = '0'
+		WHERE
+		ci.is_deleted = '0'
+		AND bcd.is_deleted = '0'
+		) a
+
+		WHERE 1 = 1
+		<if test="p.infoName != null and p.infoName != ''">
+			And a.`NAME` LIKE CONCAT('%',#{p.infoName},'%')
+		</if>
+		ORDER BY
+		a.create_time DESC
+
+	</select>
+
+	<select id="checkedCollectObject"
+		resultType="com.chinobot.aiuas.bot_collect.info.entity.vo.CollectPolygon">
+		SELECT
+		cofo.uuid as infoId,
+		cofo.o_name as infoName,
+		cogy.lnglats
+		FROM
+		bot_collect_info cofo
+		LEFT JOIN bot_collect_geography cogy ON cogy.busi_id = cofo.uuid
+		WHERE
+		cofo.is_deleted = '0'
+		AND cogy.is_deleted = '0'
+		AND cogy.lnglats !=''
+		<if test="p.id != null and p.id != ''">
+			AND cofo.collect_code LIKE CONCAT(#{p.id},'%')
+		</if>
+
+	</select>
+
+	<select id="getCollectObject" resultMap="collectObjectMap">
+		SELECT
+		bo.uuid,
+		bo.o_name,
+		bo.parent_uuid,
+		bo.o_address,
+		bo.o_desc,
+		bo.address_area_code,
+		bo.domain_uuid,
+		bo.collect_code,
+		go.uuid AS geographyId,
+		go.lng,
+		go.lat,
+		go.lnglats,
+		a.tagNames,
+		b.fileIds,
+		IFNULL(ge.lnglats,'') AS parentLnglats
+		FROM
+		bot_collect_info bo
+		LEFT JOIN bot_collect_geography go ON go.busi_id = bo.uuid
+		AND
+		go.is_deleted = '0'
+		LEFT JOIN bot_collect_geography ge ON ge.busi_id =
+		bo.parent_uuid
+		AND ge.is_deleted = '0'
+		LEFT JOIN (
+		SELECT
+		fo.uuid,
+		GROUP_CONCAT(ga.tag_name) AS tagNames
+		FROM
+		bot_collect_info fo
+		LEFT JOIN bot_collect_info_tag ta ON ta.collect_uuid = fo.uuid
+		LEFT JOIN bot_collect_tag ga ON ga.uuid = ta.tag_id
+		WHERE
+		ta.is_deleted = '0'
+		AND ga.is_deleted = '0'
+		GROUP BY
+		fo.uuid
+		) a ON a.uuid = bo.uuid
+		LEFT JOIN (
+		SELECT
+		fo.uuid,
+		GROUP_CONCAT(cb.file_id) AS fileIds
+		FROM
+		bot_collect_info fo
+		LEFT JOIN cb_file_bus cb ON cb.bus_id = fo.uuid
+		WHERE
+		cb.data_status = '1'
+		AND cb.module = 'collect_img'
+		GROUP BY
+		fo.uuid
+		) b ON b.uuid = bo.uuid
+		WHERE
+		bo.uuid = #{infoId}
+	</select>
+
+	<select id="getCode"
+		resultType="com.chinobot.aiuas.bot_collect.info.entity.vo.GovAreaVo">
+		SELECT
+		pa.id,
+		pa.parent_id AS parent,
+
+		IF (s.id != '', TRUE, FALSE) AS hasChild,
+		pa.`name` AS title,
+		pa.`code` AS govCode
+		FROM
+		p_gov_area pa
+		LEFT JOIN (
+		SELECT DISTINCT
+		a.id
+		FROM
+		p_gov_area a
+		LEFT JOIN p_gov_area b ON b.parent_id = a.id
+		WHERE
+		a.data_status = '1'
+		AND b.data_status = '1'
+		) s ON s.id = pa.id
+		WHERE
+		pa.data_status = '1'
+	</select>
+
+	<select id="getCollect"
+		resultType="com.chinobot.aiuas.bot_collect.info.entity.Info">
+
+		SELECT
+		fo.*
+		FROM
+		bot_collect_info fo
+		LEFT JOIN bot_collect_strategy_task st ON st.collect_uuid = fo.uuid
+		LEFT JOIN bot_collect_strategy cs ON cs.uuid = st.strategy_uuid
+		WHERE
+		st.is_deleted = '0'
+		AND cs.is_deleted = '0'
+		AND cs.business_status !=
+		'2'
+		AND fo.uuid = #{uuid}
+	</select>
+
+	<!-- 获取标签 -->
+	<select id="getTags" resultType="map">
+		SELECT
+		uuid,
+		tag_name AS title
+		FROM
+		bot_collect_tag
+		WHERE
+		is_deleted = '0'
+	</select>
+
+	<select id="getInfoDomainList"
+		resultType="com.chinobot.aiuas.bot_collect.info.entity.dto.InfoTreeDto">
+		SELECT
+		i.uuid AS infoId,
+		CONCAT('【对象】', i.o_name) AS infoName,
+		g.lnglats
+		as infoLnglats,
+		g.lng as infoLng,
+		g.lat as infoLat,
+		d.uuid AS domainId,
+		CONCAT('【领域】', d.d_name) AS domainName
+		FROM
+		bot_collect_info i
+		LEFT JOIN
+		bot_collect_geography g
+		ON i.uuid = g.busi_id
+		AND g.busi_type =
+		'bot_collect_info'
+		LEFT JOIN bot_collect_strategy_task st
+		ON
+		st.collect_uuid = i.uuid
+		LEFT JOIN bot_collect_domain d
+		ON i.domain_uuid
+		= d.uuid
+		WHERE i.is_deleted = '0'
+		AND g.is_deleted = '0'
+		AND
+		st.is_deleted = '0'
+		AND d.is_deleted = '0'
+		<if test="strategyId != null and strategyId != ''">
+			AND st.strategy_uuid = #{strategyId}
+		</if>
+		GROUP BY i.uuid,
+		i.o_name,
+		g.lnglats,
+		g.lng,
+		g.lat,
+		d.uuid,
+		d.d_name
+		ORDER BY
+		d.uuid, i.uuid
+
+	</select>
+	<!-- 根据任务id和策略id查询对象信息 -->
+		<select id="getInfosByTaskStragy" resultType="com.chinobot.aiuas.bot_collect.info.entity.Info">
+		  SELECT 	i.uuid,i.o_name as oName
+			FROM
+			bot_collect_info i 
+			 join bot_collect_strategy_task st on st.collect_uuid = i.uuid 
+			where st.is_deleted = '0' 
+		<if test="p.strategyUuid != null and p.strategyUuid != ''">
+			AND st.strategy_uuid = #{p.strategyUuid}
+		</if>
+		<if test="p.taskUuid != null and p.taskUuid != ''">
+			AND st.task_uuid = #{p.taskUuid}
+		</if>
+
+	</select>
+	<select id="getInfosByInfoList" resultType="com.chinobot.aiuas.bot_collect.info.entity.Info">
+		  SELECT 	i.uuid,i.o_name as oName
+			FROM bot_collect_info i 
+			 join bot_collect_strategy_task st on st.collect_uuid = i.uuid
+			where i.is_deleted = '0' 
+			<if test="p.taskUuid != null and p.taskUuid != ''">
+			AND st.task_uuid = #{p.taskUuid}
+		</if>
+		<if test="p.collectList != null and p.collectList.size != ''">
+            AND i.uuid in
+            <foreach collection="p.collectList" item="item" index="index"
+                     open="(" close=")" separator=",">
+                #{item}
+            </foreach>
+        </if>
+		
+
+	</select>
+
+	
+</mapper>

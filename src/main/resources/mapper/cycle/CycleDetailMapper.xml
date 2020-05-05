@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.cycle.mapper.CycleDetailMapper">
+
+<select id="searchCyclePage" resultType="com.chinobot.plep.home.routedd.entity.Cycle">
+SELECT
+	p.pname as operate_by, c.* 
+FROM
+	p_cycle c 
+	left join cle_person p on p.uuid=c.operate_by
+	left join cle_dept d1 on d1.uuid=#{dto.deptId}
+	left join cle_dept d2 on d2.data_status='1' and d2.dept_code like CONCAT(d1.dept_code,'%')
+WHERE
+	c.data_status = '1' 
+	<if test="dto.startTimeMin != null">
+	AND c.time_start &gt;= #{dto.startTimeMin} 
+	</if>
+	<if test="dto.startTimeMax != null">
+	AND c.time_start &lt;= #{dto.startTimeMax} 
+	</if>
+	<if test="dto.nameLike != null and dto.nameLike != ''">
+	AND c.cycle_name LIKE concat( '%', #{dto.nameLike}, '%' ) 
+	</if>
+	<if test="dto.cycleMin != null">
+	AND c.cycle &gt;= #{dto.cycleMin}
+	</if>
+	<if test="dto.cycleMax != null">
+	AND c.cycle &lt;= #{dto.cycleMax}
+	</if>
+	<if test="dto.unit != null and dto.unit != ''">
+	AND c.cycle_unit = #{dto.unit} 
+	</if>
+	<if test="dto.userStatus != null and dto.userStatus != ''">
+	AND c.use_status = #{dto.userStatus}
+	</if>
+	<if test="dto.endTimeMin != null">
+	AND c.time_end &gt;= #{dto.endTimeMin}
+	</if> 
+	<if test="dto.endTimeMax != null">
+    AND c.time_end &lt;= #{dto.endTimeMax}
+    </if>
+	AND c.dept_id = d2.uuid
+	ORDER BY c.create_time asc
+</select>
+
+<select id="searchRoute" resultType="com.chinobot.plep.home.cycle.entity.vo.RouteVo">
+SELECT
+	DISTINCT
+	ud.uuid,
+	ud.route_name,
+	ud.time route_date,
+	ud.time_all,
+	u.ename uav_name,
+	p.pname person_name
+FROM
+	p_uav_dispatch ud 
+	left join cle_uav u on u.uuid=ud.uav_id
+	left join cle_person p on p.uuid=ud.fly_person
+	left join p_cycle_detail cd on cd.data_status='1' and cd.uav_dsp_id=ud.uuid
+	left join p_cycle c on c.uuid=cd.cycle_id
+	left join cle_dept d1 on d1.uuid=#{dto.deptId}
+	left join cle_dept d2 on d2.data_status='1' and d2.dept_code like CONCAT(d1.dept_code,'%')
+WHERE
+	ud.data_status = '1' 
+	and ud.dept_id = d2.uuid
+	<if test="dto.routeName != null and dto.routeName != ''">
+	and ud.route_name like concat( '%', #{dto.routeName}, '%' ) 
+	</if>
+	<if test="dto.uavName != null and dto.uavName != ''">
+	and u.ename like concat( '%', #{dto.uavName}, '%' ) 
+	</if>
+	<if test="dto.personName != null and dto.personName != ''">
+	and p.pname like concat( '%', #{dto.personName}, '%' ) 
+	</if>
+	<if test="dto.timeMin != null">
+	and ud.time &gt;= #{dto.timeMin}
+	</if>
+	<if test="dto.timeMax != null">
+	and ud.time &lt;= #{dto.timeMax}
+	</if>
+	<if test="dto.planName != null and dto.planName != ''">
+	and c.cycle_name like concat( '%', #{dto.planName}, '%' ) 
+	</if>
+ORDER BY
+	ud.time DESC
+</select>
+<select id="getRouteDetaill" resultType="com.chinobot.plep.home.cycle.entity.vo.RouteDetailVo">
+SELECT
+	dd.uuid,
+	dd.distance,
+	dd.get_time,
+	dd.check_time,
+	cp.NAME point_name,
+	cp.address,
+	dd.sort
+FROM
+	p_dispatch_detail dd
+	LEFT JOIN p_check_point cp ON cp.uuid = dd.point_id 
+WHERE
+	dd.data_status = '1'
+ 	and dd.uav_dsp_id = #{dspId}
+	ORDER BY dd.sort asc
+</select>
+<select id="getDetailDspIds" resultType="String">
+SELECT
+	cd.uav_dsp_id 
+FROM
+	p_cycle_detail cd 
+WHERE
+	cd.data_status = '1' 
+	AND cd.cycle_id = #{cycleId}
+</select>
+<select id="getCycleVo" resultType="com.chinobot.plep.home.cycle.entity.vo.CycleWithDetailVo">
+SELECT * from p_cycle where uuid = #{uuid}
+</select>
+</mapper>

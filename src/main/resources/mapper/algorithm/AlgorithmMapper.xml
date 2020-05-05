@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.algorithm.mapper.AlgorithmMapper">
+   	
+   	<select id="getPathAlgorithmByTask" resultType="com.chinobot.plep.home.algorithm.entity.Algorithm">
+	   	SELECT
+			ag.*
+		FROM
+			p_dispatch_detail_path dp
+			LEFT JOIN p_fly_path fp ON dp.path_id = fp.uuid AND fp.data_status=1
+			LEFT JOIN p_fly_area fa ON fp.area_id = fa.uuid AND fa.data_status=1
+			LEFT JOIN p_range rg ON fa.rang_id=rg.uuid AND rg.data_status=1
+			LEFT JOIN p_scene_range sr ON rg.uuid = sr.range_id AND sr.data_status=1
+			LEFT JOIN p_scene sc2 ON sr.scene_id = sc2.uuid AND sc2.data_status=1
+			LEFT JOIN p_scene sc ON sc2.parent_id = sc.uuid AND sc.data_status=1
+			LEFT JOIN p_algorithm ag ON sc.uuid = ag.scene_id AND ag.data_status=1
+		WHERE
+			dp.uuid = #{param.uuid} AND ag.scene_type='02'
+   	</select>
+   	
+   	<select id="getRouterAlgorithmByPoint" resultType="com.chinobot.plep.home.algorithm.entity.Algorithm">
+	   	SELECT
+			ag.* 
+		FROM
+			p_scene_point sp
+		LEFT JOIN
+			p_scene sc2 ON sp.scene_id = sc2.uuid AND sc2.data_status=1 
+		LEFT JOIN
+			p_scene sc ON sc2.parent_id = sc.uuid AND sc.data_status=1 
+		LEFT JOIN
+			p_algorithm ag ON sc.uuid = ag.scene_id AND ag.data_status=1 
+		WHERE
+			sp.point_id=#{param.uuid} AND ag.scene_type='01'
+   	</select>
+   	
+   	
+   	<select id="getRouterAlgorithmByTask" resultType="com.chinobot.plep.home.algorithm.entity.Algorithm">
+		SELECT 
+			*
+		FROM 	
+			p_algorithm
+		WHERE 
+			data_status='1' and scene_type='01' and scene_id in (
+				SELECT
+					distinct(s.parent_id)
+				FROM 
+					p_dispatch_detail_route ddr
+					LEFT JOIN p_route_point rp ON ddr.route_id=rp.route_id
+					LEFT JOIN p_scene_point sp ON rp.point_id=sp.point_id
+					LEFT JOIN p_scene s on s.uuid = sp.scene_id
+				WHERE 
+					ddr.uuid=#{param.uuid}
+			)
+   	</select>
+   	
+   	<select id="getAlgorithmList" resultType="HashMap">
+   		SELECT 
+   			a.uuid,a.name,a.algorithm_version,a.scene_id,a.domain_type,a.scene_type,a.platform_type
+		FROM 
+			p_algorithm a
+		WHERE 
+			a.data_status=1
+			<if test="param.name != null and param.name != ''">
+				AND a.name LIKE CONCAT( '%', #{param.name}, '%' ) 
+			</if>
+			<if test="param.domainType != null and param.domainType != ''">
+				AND a.domain_type in (${param.domainType})
+			</if>
+			<if test="param.sceneType != null and param.sceneType != ''">
+				AND a.scene_type in (${param.sceneType})
+			</if>
+			<if test="param.operatingPlatform != null and param.operatingPlatform != ''">
+				AND a.platform_type in (${param.operatingPlatform})
+			</if>
+		ORDER BY a.scene_id 
+   	</select>
+   	
+   	<select id="getSceneByAlgorithm" resultType="HashMap">
+		SELECT 
+			s2.*
+		FROM
+			p_scene s1
+			left join p_scene s2 on s1.uuid=s2.parent_id
+		WHERE
+			s1.parent_id is null and s1.code=#{param.domainType} and s2.code=#{param.sceneType}	
+   	</select>
+   	
+   	<select id="stopAlgorithm" resultType="HashMap">
+		UPDATE p_algorithm SET data_status=0 
+		WHERE domain_type=#{param.domainType} AND scene_type=#{param.sceneType} AND platform_type=#{param.operatingPlatform} AND uuid != #{param.uuid}
+   	</select>
+   	
+   	<select id="getPointsByFlyId" resultType="com.chinobot.plep.home.point.entity.FixedPoint">
+   		SELECT
+			fp.*
+		FROM
+			p_fixed_point fp
+		LEFT JOIN p_route_point rp ON rp.point_id = fp.uuid
+		WHERE
+			rp.data_status = '1'
+		AND fp.data_status = '1' and rp.route_id = #{routeId}
+   	</select>
+</mapper>

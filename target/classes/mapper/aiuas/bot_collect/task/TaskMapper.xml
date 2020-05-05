@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.task.mapper.TaskMapper">
+
+    <select id="getTaskList"
+            resultType="com.chinobot.aiuas.bot_collect.task.entity.vo.TaskListVo">
+        SELECT
+            t.uuid,
+            t.t_name AS tName,
+            t.result_name AS resultName,
+            t.danger_grade AS dangerGrade,
+            t.result_type AS resultType,
+            s.s_name AS sceneName
+        FROM
+            bot_collect_task t
+            LEFT JOIN bot_collect_scene s ON t.scene_uuid = s.uuid
+        WHERE
+            t.is_deleted = FALSE
+            AND s.is_deleted = FALSE
+            <if test="p.sceneUuid != null and p.sceneUuid != ''">
+                AND t.scene_uuid = #{p.sceneUuid}
+            </if>
+        ORDER BY tName
+    </select>
+    <select id="getTaskById"
+            resultType="com.chinobot.aiuas.bot_collect.task.entity.vo.TaskInfoVo">
+        SELECT
+            t.uuid,
+            t.t_name AS tname,
+            t.result_name AS resultName,
+            t.result_type AS resultType,
+            t.danger_grade AS dangerGrade,
+            t.algorithm_uuid as algorithmUuid,
+            ai.algorithm_name as algorithmName,
+            d.uuid AS domainUuid,
+            d.d_name AS domainName,
+            s.uuid AS sceneUuid,
+            s.s_name AS sceneName,
+            t.collect_result as collectResult
+        FROM
+            bot_collect_task t
+            LEFT JOIN bot_collect_scene s ON t.scene_uuid = s.uuid
+            AND s.is_deleted = FALSE
+            LEFT JOIN bot_collect_domain d ON s.domain_uuid = d.uuid
+            AND d.is_deleted = FALSE
+            LEFT JOIN bot_algorithm_info ai on ai.uuid = t.algorithm_uuid
+            AND ai.is_deleted = FALSE
+        WHERE
+            d.is_deleted = FALSE
+            <if test="uuid != null and uuid != ''">
+                AND t.uuid = #{uuid}
+            </if>
+    </select>
+    <select id="getDomainSceneBySceneId"
+            resultType="com.chinobot.aiuas.bot_collect.task.entity.vo.TaskInfoVo">
+        SELECT
+            d.uuid AS domainUuid,
+            d.d_name AS domainName,
+            s.uuid AS sceneUuid,
+            s.s_name AS sceneName
+        FROM
+            bot_collect_scene s
+            LEFT JOIN bot_collect_domain d ON s.domain_uuid = d.uuid
+            AND d.is_deleted = FALSE
+        WHERE
+            s.is_deleted = FALSE
+            AND s.uuid = #{sceneUuid}
+    </select>
+    <select id="getTaskSceneByStrategyIdAndInfoId"
+            resultType="com.chinobot.aiuas.bot_collect.task.entity.dto.TaskSceneDto">
+        <!-- SELECT
+          t.uuid AS taskId,
+          t.t_name AS taskName,
+          s.uuid AS sceneId,
+          s.s_name AS sceneName,
+          ft.flight_uuid As flightId,
+          IF (ft.uuid IS NULL, '0', '1') AS selected
+        FROM
+           bot_collect_strategy_task st
+          LEFT JOIN bot_collect_task t
+            ON st.task_uuid = t.uuid
+          LEFT JOIN bot_collect_scene s
+            ON t.scene_uuid = s.uuid
+			LEFT JOIN bot_collect_flight_task ft ON st.collect_uuid = ft.collect_uuid 
+			AND st.task_uuid = ft.task_uuid 
+			AND ft.is_deleted = '0' 
+			  LEFT JOIN bot_prospect_flight f ON f.is_deleted = 0 
+			AND f.strategy_id = st.strategy_uuid and f.uuid=ft.flight_uuid
+        WHERE st.strategy_uuid = #{strategyId}
+          AND st.collect_uuid = #{infoId}
+          AND st.is_deleted = '0'
+          AND t.is_deleted = '0'
+          AND s.is_deleted = '0'
+          AND ((ft.flight_uuid is null and f.strategy_id is null) or (ft.flight_uuid is not null and f.strategy_id is not null))
+        ORDER BY s.uuid, t.uuid -->
+        SELECT
+	t.uuid AS taskId,
+	t.t_name AS taskName,
+	s.uuid AS sceneId,
+	s.s_name AS sceneName,
+	fft.flight_uuid AS flightId,
+IF
+	( fft.flight_uuid IS NULL, '0', '1' ) AS selected 
+FROM
+	bot_collect_strategy_task st
+	LEFT JOIN bot_collect_task t ON st.task_uuid = t.uuid
+	LEFT JOIN bot_collect_scene s ON t.scene_uuid = s.uuid
+	LEFT JOIN (
+SELECT
+	f.uuid flight_uuid,
+	ft.collect_uuid,
+	ft.task_uuid,
+	f.strategy_id 
+FROM
+	bot_prospect_flight f
+	LEFT JOIN bot_collect_flight_task ft ON ft.is_deleted = 0 
+	AND f.uuid = ft.flight_uuid 
+WHERE
+	f.is_deleted = 0 
+	) fft ON fft.strategy_id = st.strategy_uuid 
+	AND st.collect_uuid = fft.collect_uuid 
+	AND st.task_uuid = fft.task_uuid 
+WHERE st.strategy_uuid = #{strategyId}
+          AND st.collect_uuid = #{infoId}
+	AND st.is_deleted = '0' 
+	AND t.is_deleted = '0' 
+	AND s.is_deleted = '0' 
+ORDER BY
+	s.uuid,
+	t.uuid
+    </select>
+</mapper>

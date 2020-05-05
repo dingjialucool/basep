@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.plan.mapper.FlyPathMapper">
+	
+	<select id="getRangeByFlyPath" resultType="com.chinobot.plep.home.plan.entity.Range">
+		select
+			rg.*
+		from 
+			p_fly_path p
+			LEFT JOIN p_fly_area ar ON p.area_id=ar.uuid
+			Left JOIN p_range rg ON ar.rang_id=rg.uuid
+		where 
+			p.uuid=#{p.flyPathId}
+	</select>
+</mapper>

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper
+	namespace="com.chinobot.plep.home.building.mapper.VillageMapper">
+	<resultMap
+		type="com.chinobot.cityle.base.entity.vo.VoAddressBase"
+		id="voAddressBaseResultMap">
+		<association property="entity" javaType="map">
+			<id column="uuid" property="uuid" />
+			<result column="abs_id" property="absId" />
+			<result column="name" property="name" />
+			<result column="code" property="code" />
+			<result column="dept_Id" property="deptId" />
+			<result column="data_status" property="dataStatus" />
+			<result column="fileId" property="fileId" />
+			<result column="path" property="path" />
+		</association>
+		<association property="addressBase"
+			resultMap="com.chinobot.framework.web.mapper.IBaseMapper.addressBaseResultMap">
+		</association>
+	</resultMap>
+	<select id="getVillageAddr" resultMap="voAddressBaseResultMap">
+	SELECT 
+	b.*,
+	ab.uuid AS ab_uuid,
+	ab.atype AS ab_atype,
+	cr.name AS ab_province_name,
+	cs.name AS ab_city_name,
+	ce.name AS ab_district_name,
+	cg.name AS ab_street_name,
+	ab.address AS ab_address,
+	ab.center AS ab_center,
+	ab.polyline AS ab_polyline,
+	ab.data_status AS ab_data_status 
+FROM
+	p_village b
+	LEFT JOIN cle_address_base ab ON b.abs_id = ab.uuid
+	LEFT JOIN cb_regions  cr on cr.code = ab.province 
+	LEFT JOIN cb_regions  cs on cs.code = ab.city 
+	LEFT JOIN cb_regions  ce on ce.code = ab.district 
+	LEFT JOIN cb_regions  cg on cg.code = ab.street 
+WHERE
+	1 = 1
+		<if test="p.dataStatus != null and p.dataStatus != ''">
+			AND b.data_status = #{p.dataStatus}
+		</if>
+		<!-- <if test="p.deptId != null and p.deptId != ''">
+          AND b.dept_id  in 
+		  	<foreach collection="p.deptId" item="type" index="index"  
+	            open="(" close=")" separator=",">  
+	            #{type}  
+        	</foreach>
+        </if> -->
+        <if test="p.deptId != null and p.deptId != ''">
+          AND b.dept_id =#{p.deptId} 
+		  	
+        </if>
+		<if test="p.uuid != null and p.uuid != ''">
+			AND b.uuid = #{p.uuid}
+		</if>
+		<if test="p.name != null and p.name != ''">
+			AND b.name like CONCAT('%', #{p.name}, '%')
+		</if>
+	</select>
+<select id="getImgListByBusId" resultType="HashMap">
+		SELECT
+	        uf.uuid as fileId,
+			uf.origin_name as name,
+			CONCAT('/aiuas/api/file/ioimage?fileId=', fb.file_id) AS url
+		FROM
+			cb_file_bus fb
+			LEFT JOIN cb_upload_file uf ON uf.uuid = fb.file_id 
+			AND uf.data_status = '1' 
+		WHERE
+			fb.data_status = '1' 
+			and fb.module=#{module}
+			AND fb.bus_id = #{busId}
+			order by uf.operate_time desc
+	</select>
+	<select id="getAllPolyLine" resultType="HashMap">
+	SELECT v.uuid, ab.polyline from p_village v LEFT join cle_address_base ab on ab.uuid=v.abs_id where v.data_status='1' and ab.polyline is not null
+	</select>
+</mapper>

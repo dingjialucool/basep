@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.plan.mapper.RangeDeptMapper">
+	<select id="getRangeGrid" resultType="map">
+		SELECT
+        dp.uuid,
+	    cd.dname,
+        dp.dept_id,
+        dp.range_id,
+        dp.data_status,
+        dp.create_by,
+        dp.create_time,
+        dp.operate_by,
+        dp.operate_time 
+    FROM 
+        p_range_dept dp 
+	    left join cle_dept cd on dp.dept_id = cd.uuid 
+        WHERE 1=1 
+       <if test="p.data_status != null and p.data_status != ''">
+         AND dp.data_status = #{p.data_status}
+       </if>
+        <if test="p.range_id != null and p.range_id != ''">
+         AND dp.range_id = #{p.range_id}
+       </if>
+       AND dp.dept_id is not null
+	</select>
+
+</mapper>

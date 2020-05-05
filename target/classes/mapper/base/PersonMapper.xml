@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.base.mapper.PersonMapper">
+
+	<select id="getPersonByParam" resultType="map">
+      SELECT
+        p.uuid,
+		p.dept_id AS deptId,
+		p.pname,
+		p.pcode,
+		p.duties,
+		p.phone,
+		p.email,
+		p.wx,
+		p.password,
+        fb.uuid AS fbId,
+        fb.file_id AS fileId
+      <if test="p.url != null and p.url != ''">
+        ,CONCAT(#{p.url}, fb.file_id) AS url
+      </if>
+		FROM cle_person p
+		LEFT JOIN cb_file_bus fb
+		  ON p.uuid = fb.bus_id
+		 AND fb.data_status = '1'
+       <if test="p.module != null and p.module != ''">
+         AND fb.module = #{p.module}
+       </if>
+	   WHERE p.data_status = '1'
+       <if test="p.uuid != null and p.uuid != ''">
+         AND p.uuid = #{p.uuid}
+       </if>
+	</select>
+	
+	<select id="getPersonPage" resultType="map">
+     SELECT
+			p.* ,s.file_id
+		FROM
+			cle_person p
+		LEFT JOIN (
+			SELECT
+				b.*
+			FROM
+				cb_file_bus b
+			WHERE
+				b.module = 'person_face'
+		) s ON p.uuid = s.bus_id
+		AND s.data_status = '1'
+		left join cle_dept d  on d.uuid = p.dept_id
+			<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			</if>
+		WHERE
+			p.data_status = '1'
+		  <if test="p.pname != null and p.pname != ''">
+             and p.pname LIKE CONCAT('%', #{p.pname}, '%')
+          </if>
+          <if test="p.deptId != null and p.deptId != ''">
+               AND d.dept_code like CONCAT(d2.dept_code,'%') 
+          </if>
+          <if test="p.pcode != null and p.pcode != ''">
+                and p.pcode LIKE CONCAT('%', #{p.pcode}, '%')
+          </if>
+          <if test="p.duties != null and p.duties != ''">
+                and p.duties LIKE CONCAT('%', #{p.duties}, '%')
+          </if>
+          <if test="p.phone != null and p.phone != ''">
+                and p.phone LIKE CONCAT('%', #{p.phone}, '%')
+          </if>
+	</select>
+	<select id="getPersonBydeptAndChild" resultType="com.chinobot.cityle.base.entity.Person">
+	SELECT
+	p.*
+FROM
+	cle_person p
+	LEFT JOIN cle_dept d2 ON d2.uuid = #{p.deptId}
+	LEFT JOIN cle_dept d ON d.dept_code LIKE CONCAT( d2.dept_code, '%' ) 
+WHERE
+	p.data_status = '1' 
+	AND p.dept_id = d.uuid
+	</select>
+	<select id="getAllOpenIdPerson" resultType="com.chinobot.plep.home.meeting.entity.vo.PersonVo">
+		SELECT
+			p.uuid,
+			p.pname,
+			p.open_id,
+			p.duties,
+		  	fb.file_id	
+		FROM
+			cle_person p
+			<if test="deptId != null and deptId != ''">
+				left join cle_dept d1 on d1.uuid=#{deptId}
+				left join cle_dept d2 on d2.data_status='1' and d2.uuid=p.dept_id
+			</if>
+		left join cb_file_bus fb on fb.data_status='1' and fb.module='person_face' and fb.bus_id=p.uuid
+		WHERE
+			p.data_status = '1'
+			<if test="deptId != null and deptId != ''">
+				and d2.dept_code LIKE CONCAT( d1.dept_code, '%' )
+			</if>
+	</select>
+	<select id="personVoById" resultType="com.chinobot.plep.home.meeting.entity.vo.PersonVo">
+	SELECT
+			p.uuid,
+			p.pname,
+			p.open_id,
+		  fb.file_id	
+		FROM
+			cle_person p 
+		left join cb_file_bus fb on fb.data_status='1' and fb.module='person_face' and fb.bus_id=p.uuid
+		WHERE
+			p.uuid=#{uuid}
+	</select>
+	<select id="getPersonByOrganization"
+			resultType="com.chinobot.cityle.base.entity.vo.PersonOrganizationVo">
+		SELECT
+			* 
+		FROM
+			(
+			SELECT
+				d.uuid AS deptUuid,
+				NULL AS `key`,
+				d.dname AS `title`,
+				TRUE AS isLabel 
+			FROM
+				cle_dept d 
+			WHERE
+				d.data_status = '1' 
+				<if test="organization != null and organization != ''">
+					AND d.organization = #{organization}
+				</if>
+
+			UNION ALL
+				
+			SELECT
+				p.dept_id AS deptUuid,
+				p.uuid AS `key`,
+				p.pname AS `title`,
+				FALSE AS isLabel 
+			FROM
+				cle_person p
+				LEFT JOIN (
+				SELECT d.uuid
+				FROM cle_dept d
+				WHERE d.data_status = '1'
+				<if test="organization != null and organization != ''">
+					AND d.organization = #{organization}
+				</if>
+				) a
+				ON p.dept_id = a.uuid 
+			WHERE
+				p.data_status = '1' 
+				AND a.uuid IS NOT NULL 
+			) b 
+		ORDER BY
+			b.deptUuid,
+			isLabel DESC
+	</select>
+</mapper>

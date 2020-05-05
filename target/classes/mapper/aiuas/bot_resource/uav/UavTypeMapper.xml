@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_resource.uav.mapper.UavTypeMapper">
+
+    <select id="getUavTypeList"
+            resultType="com.chinobot.aiuas.bot_resource.uav.entity.vo.UavTypeListVo">
+        SELECT
+            ut.uuid,
+            ut.module_name AS moduleName,
+            ut.type,
+            ut.firm_name AS firmName,
+            ( SELECT count( u.uuid ) FROM bot_resource_uav u WHERE u.is_deleted = FALSE AND u.uav_type_uuid = ut.uuid ) AS uavCount
+        FROM
+            bot_resource_uav_type ut
+        WHERE
+            ut.is_deleted = FALSE
+    </select>
+    <select id="getUavType"
+            resultType="com.chinobot.aiuas.bot_resource.uav.entity.vo.UavTypeInfoVo">
+        SELECT
+            ut.uuid,
+            ut.module_name,
+            ut.type,
+            ut.max_length,
+            ut.max_width,
+            ut.max_height,
+            ut.max_weight,
+            ut.uav_description,
+            ut.max_load,
+            ut.max_wind_speed,
+            ut.max_fly_time_min,
+            ut.job_environment_lower_temperature,
+            ut.job_environment_higher_temperature,
+            ut.firm_name,
+            ut.link_person,
+            ut.link_phone
+        FROM
+            bot_resource_uav_type ut
+        WHERE
+            ut.is_deleted = FALSE
+        <if test="p.uuid != null and p.uuid != ''">
+            AND ut.uuid = #{p.uuid}
+        </if>
+    </select>
+</mapper>

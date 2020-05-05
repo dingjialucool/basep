@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.point.mapper.FixedFlyPointMapper">
+
+	<select id="getAllFlyPointByFixPointId" resultType="string">
+		SELECT
+			uuid
+		FROM
+			p_fixed_fly_point
+		WHERE
+			data_status = '1' AND fixed_id = #{uuid}
+		ORDER BY
+			sort ASC
+		
+	</select>
+	<select id="listFlyPointsByTaskId" resultType="com.chinobot.plep.home.point.entity.FixedFlyPoint">
+	SELECT
+	ffp.*
+FROM
+	p_dispatch_detail_route ddr
+	LEFT JOIN p_route_point rp ON ddr.route_id = rp.route_id 
+	AND rp.data_status = '1'
+	left join p_fixed_fly_point ffp on ffp.fixed_id=rp.point_id and ffp.data_status='1'
+	where ffp.uuid is not null
+	and ddr.uuid=#{uuid}
+	ORDER BY rp.sort, ffp.sort
+	</select>
+</mapper>

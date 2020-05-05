@@ -1,0 +1,907 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_prospect.flight.mapper.FlightWorkMapper">
+	<resultMap type="com.chinobot.aiuas.bot_prospect.flight.entity.vo.UavObjectVo" id="objAndTasksMap">
+		<id column="object_id" property="objectId"/>
+		<result column="object_name" property="objectName"/>
+		<result column="lnglats" property="lnglats"/>
+		<collection property="tasks" ofType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.UavTaskVo">
+			<id column="task_id" property="taskId"/>
+			<result column="task_name" property="taskName"/>
+			<result column="algorithm_id" property="algorithmId"/>
+			<result column="algorithm_name" property="algorithmName"/>
+		</collection>
+	</resultMap>
+	<resultMap type="com.chinobot.aiuas.bot_prospect.flight.entity.vo.CollectResultVo" id="collectDataRsMap" autoMapping="true">
+		<id column="collect_id" property="collectId"/>
+		<collection property="list" ofType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.CollectResultItemVo" autoMapping="true">
+			<id column="rs_key" property="rsKey"/>
+		</collection>
+	</resultMap>
+	<resultMap
+		type="com.chinobot.aiuas.bot_collect.warning.entity.vo.EchartDateVo"
+		id="echartDataMap">
+		<result column="collectName" property="collectName" />
+		<result column="flightDate" property="flightDate" />
+		<collection property="rsValueList" ofType="String">
+			<result column="rsValue" property="rsValueList" />
+		</collection>
+	</resultMap>
+	<resultMap
+		type="com.chinobot.aiuas.bot_collect.warning.entity.vo.MapCoordinateInfoVo"
+		id="mapAddressInfoData">
+		<result column="collectName" property="collectName" />
+		<result column="warningName" property="warningName" />
+		<result column="flightDate" property="flightDate" />
+		<result column="address" property="address" />
+		<result column="eventType" property="eventType" />
+		<result column="lng" property="lng" />
+		<result column="lat" property="lat" />
+		<result column="longitude" property="longitude" />
+		<result column="latitude" property="latitude" />
+		<collection property="rsValueList" ofType="String">
+			<result column="rsValue" property="rsValueList" />
+		</collection>
+	</resultMap>
+	
+    <select id="getList"
+            resultType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.FlightWorkPageVo">
+        SELECT
+          fw.uuid AS workId,
+          fw.flight_uuid as flightUuid,
+          f.flignt_name AS flightName,
+          s.uuid AS strategyUuid,
+          s.strategy_name AS strategyName,
+          u.ename AS uavName,
+          p.pname AS personName,
+          fw.work_status AS workStatus,
+          a.airport_name AS airportName,
+          fw.flight_time AS flightTime,
+          f.fly_minute AS flyMinute,
+          fw.work_minute as workMinute
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+            AND f.is_deleted = '0'
+          LEFT JOIN bot_collect_strategy s
+            ON f.strategy_id = s.uuid
+            AND s.is_deleted = '0'
+          LEFT JOIN bot_resource_uav u
+            ON fw.uav_uuid = u.uuid
+            AND u.is_deleted = '0'
+          LEFT JOIN cle_person p
+            ON fw.person_uuid = p.uuid
+            AND p.data_status = '1'
+          LEFT JOIN bot_prospect_airport a
+            ON f.airport_uuid = a.uuid
+            AND a.is_deleted = '0'
+        WHERE fw.is_deleted = '0'
+        <if test="p.flightDate != null and p.flightDate != ''">
+            AND fw.flight_date = #{p.flightDate}
+        </if>
+        <if test="p.flightName != null and p.flightName != ''">
+            AND f.flignt_name LIKE CONCAT('%',#{p.flightName},'%')
+        </if>
+        <if test="p.strategyId != null and p.strategyId != ''">
+            AND s.uuid = #{p.strategyId}
+        </if>
+        <if test="p.workStatus != null and p.workStatus != ''">
+            AND fw.work_status in
+            <foreach collection="p.workStatus" item="item" index="index"
+                     open="(" close=")" separator=",">
+                #{item}
+            </foreach>
+        </if>
+        <if test="p.personUuid != null and p.personUuid != ''">
+            AND p.uuid = #{p.personUuid}
+        </if>
+        <if test="p.uavUuid != null and p.uavUuid != ''">
+            AND u.uuid = #{p.uavUuid}
+        </if>
+    </select>
+    <select id="getUavMinuteList"
+            resultType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.UavPersonMinuteVo">
+        SELECT
+          u.uuid,
+          u.ename AS `name`,
+          SUM(fw.work_minute) AS minuteTotal,
+          fb.file_id AS fileId
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+          LEFT JOIN bot_resource_uav u
+            ON fw.uav_uuid = u.uuid
+          LEFT JOIN cb_file_bus fb
+            ON u.uuid = fb.bus_id
+            AND fb.data_status = '1'
+            AND fb.sort = '1'
+        WHERE <!-- fw.work_status = '2' -->
+          fw.is_deleted = '0'
+          AND u.is_deleted = '0'
+          <if test="p.flightDate != null and p.flightDate != ''">
+            AND fw.flight_date = #{p.flightDate}
+          </if>
+            <if test="p.workStatus != null and p.workStatus != ''">
+                AND fw.work_status in
+                <foreach collection="p.workStatus" item="item" index="index"
+                         open="(" close=")" separator=",">
+                    #{item}
+                </foreach>
+            </if>
+        GROUP BY
+          u.uuid,
+          u.ename,
+          fb.file_id
+    </select>
+    <select id="getPersonMinuteList"
+            resultType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.UavPersonMinuteVo">
+        SELECT
+          p.uuid,
+          p.pname AS `name`,
+          SUM(fw.work_minute) AS minuteTotal,
+          fb.file_id AS fileId
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+          LEFT JOIN cle_person p
+            ON fw.person_uuid = p.uuid
+          LEFT JOIN cb_file_bus fb
+            ON p.uuid = fb.bus_id
+            AND fb.data_status = '1'
+            AND fb.sort = '1'
+        WHERE
+          fw.is_deleted = '0'
+          AND p.data_status = '1'
+          <if test="p.flightDate != null and p.flightDate != ''">
+            AND fw.flight_date = #{p.flightDate}
+          </if>
+        <if test="p.workStatus != null and p.workStatus != ''">
+            AND fw.work_status in
+            <foreach collection="p.workStatus" item="item" index="index"
+                     open="(" close=")" separator=",">
+                #{item}
+            </foreach>
+        </if>
+        GROUP BY
+          p.uuid,
+          p.pname,
+          fb.file_id
+    </select>
+    <select id="getStatistics"
+            resultType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.StatisticsVo">
+        SELECT
+          COUNT(DISTINCT f.uuid) AS flightTotal,
+          COUNT(DISTINCT s.uuid) AS strategyTotal,
+          COUNT(DISTINCT u.uuid) AS uavTotal,
+          COUNT(DISTINCT p.uuid) AS personTotal,
+          COUNT(DISTINCT a.uuid) AS airportTotal,
+          IFNULL(SUM(fw.work_minute), 0) AS minuteTotal,
+          IFNULL(SUM(CASE fw.work_status WHEN '1' THEN 1 END), 0) AS standby,
+          IFNULL(SUM(CASE fw.work_status WHEN '2' THEN 1 END), 0) AS executed,
+          IFNULL(SUM(CASE fw.work_status WHEN '3' THEN 1 END), 0) AS completed,
+          IFNULL(SUM(CASE fw.work_status WHEN '4' THEN 1 END), 0) AS done,
+          IFNULL(SUM(CASE fw.work_status WHEN '0' THEN 1 END), 0) AS cancel
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+            AND f.is_deleted = '0'
+            LEFT JOIN bot_collect_strategy s
+            ON f.strategy_id = s.uuid
+            AND fw.is_deleted = '0'
+            LEFT JOIN bot_resource_uav u
+            ON fw.uav_uuid = u.uuid
+            AND u.is_deleted = '0'
+            LEFT JOIN cle_person p
+            ON fw.person_uuid = p.uuid
+            AND p.data_status = '1'
+            LEFT JOIN bot_prospect_airport a
+            ON f.airport_uuid = a.uuid
+            AND a.is_deleted = '0'
+           WHERE fw.is_deleted  = '0'
+           <if test="p.flightDate != null and p.flightDate != ''">
+               AND fw.flight_date = #{p.flightDate}
+           </if>
+            <if test="p.workStatus != null and p.workStatus != ''">
+                AND fw.work_status in
+                <foreach collection="p.workStatus" item="item" index="index"
+                         open="(" close=")" separator=",">
+                    #{item}
+                </foreach>
+            </if>
+    </select>
+    
+    <select id="getMaxBatch" resultType="Integer">
+    	SELECT
+			IFNULL( MAX( fw.batch ), 0 ) 
+		FROM
+			bot_prospect_flight f
+			LEFT JOIN bot_prospect_flight_work fw ON fw.flight_uuid = f.uuid 
+		WHERE
+			f.strategy_id = #{strategyId}
+    </select>
+    
+    <select id="countBystrategyAndDate" resultType="Long">
+    SELECT
+	count(1)
+FROM
+	bot_prospect_flight f
+	LEFT JOIN bot_prospect_flight_work fw ON fw.flight_uuid = f.uuid 
+WHERE
+	f.is_deleted=0 and fw.is_deleted=0 and f.strategy_id = #{p.strategyId} and fw.flight_date= #{p.flyDate}
+    </select>
+    <select id="getFlightTaskStatistics" resultType="java.util.Map">
+        SELECT
+          a.totalCount,
+          b.standbyCount,
+          ROUND(b.standbyCount / a.totalCount * 100) AS percent
+        FROM
+          (SELECT
+            COUNT(fw.uuid) AS totalCount
+          FROM
+            bot_prospect_flight_work fw
+            LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+            LEFT JOIN bot_collect_strategy s
+            ON f.strategy_id = s.uuid
+          WHERE fw.is_deleted = '0'
+            AND f.is_deleted = '0'
+            AND s.is_deleted = '0'
+            AND fw.work_status != '0'
+            AND fw.work_status != '4'
+            <if test="p.flightDate != null and p.flightDate != ''">
+                AND fw.flight_date = #{p.flightDate}
+            </if>
+            <if test="p.startDate != null and p.startDate != ''">
+                <choose>
+                    <when test="p.startDate == p.endDate">
+                        AND (fw.flight_date BETWEEN #{p.startDate} AND #{p.endDate}
+                        OR DATE_FORMAT(DATE_ADD(CONCAT(fw.flight_date, ' ', fw.flight_time), INTERVAL fw.work_minute MINUTE),'%Y-%m-%d')
+                        BETWEEN #{p.startDate} AND #{p.endDate})
+                    </when>
+                    <otherwise>
+                        AND (fw.flight_date BETWEEN #{p.startDate} AND DATE_ADD(#{p.endDate},INTERVAL 1 DAY)
+                        OR DATE_FORMAT(DATE_ADD(CONCAT(fw.flight_date, ' ', fw.flight_time), INTERVAL fw.work_minute MINUTE),'%Y-%m-%d')
+                        BETWEEN #{p.startDate} AND DATE_ADD(#{p.endDate},INTERVAL 1 DAY))
+                    </otherwise>
+                </choose>
+            </if>
+            ) a,
+          (SELECT
+            COUNT(fw.uuid) AS standbyCount
+          FROM
+            bot_prospect_flight_work fw
+            LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+            LEFT JOIN bot_collect_strategy s
+            ON f.strategy_id = s.uuid
+          WHERE fw.is_deleted = '0'
+            AND f.is_deleted = '0'
+            AND s.is_deleted = '0'
+            AND fw.work_status != '0'
+            AND fw.work_status != '1'
+            AND fw.work_status != '4'
+            <if test="p.flightDate != null and p.flightDate != ''">
+                AND fw.flight_date = #{p.flightDate}
+            </if>
+            <if test="p.startDate != null and p.startDate != ''">
+                <choose>
+                    <when test="p.startDate == p.endDate">
+                        AND (fw.flight_date BETWEEN #{p.startDate} AND #{p.endDate}
+                        OR DATE_FORMAT(DATE_ADD(CONCAT(fw.flight_date, ' ', fw.flight_time), INTERVAL fw.work_minute MINUTE),'%Y-%m-%d')
+                        BETWEEN #{p.startDate} AND #{p.endDate})
+                    </when>
+                    <otherwise>
+                        AND (fw.flight_date BETWEEN #{p.startDate} AND DATE_ADD(#{p.endDate},INTERVAL 1 DAY)
+                        OR DATE_FORMAT(DATE_ADD(CONCAT(fw.flight_date, ' ', fw.flight_time), INTERVAL fw.work_minute MINUTE),'%Y-%m-%d')
+                        BETWEEN #{p.startDate} AND DATE_ADD(#{p.endDate},INTERVAL 1 DAY))
+                    </otherwise>
+                </choose>
+            </if>
+            ) b
+    </select>
+    <select id="getWorkTime"
+            resultType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.FlightWorkVo">
+        SELECT
+          fw.uuid AS id,
+          CONCAT(a.uuid, u.uuid, p.uuid) AS resourceId,
+          f.flignt_name AS title,
+          f.uuid AS flightUuid,
+          a.uuid AS airportUuid,
+          u.uuid AS uavUuid,
+          p.uuid AS PersonUuid,
+          CONCAT(fw.flight_date, ' ', fw.flight_time) AS `start`,
+          DATE_ADD(
+            CONCAT(fw.flight_date, ' ', fw.flight_time),
+            INTERVAL fw.work_minute MINUTE
+          ) AS `end`,
+          fw.is_deleted AS isDeleted,
+          fw.work_status as workStatus
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+          LEFT JOIN bot_resource_uav u
+            ON fw.uav_uuid = u.uuid
+          LEFT JOIN cle_person p
+            ON u.person_uuid = p.uuid
+          LEFT JOIN bot_prospect_airport_uav au
+            ON u.uuid = au.uav_uuid
+          LEFT JOIN bot_prospect_airport a
+            ON a.uuid = au.airport_uuid
+        WHERE fw.is_deleted = '0'
+          AND fw.work_status != '0'
+          AND fw.work_status != '4'
+          AND fw.flight_time IS NOT NULL
+          AND f.is_deleted = '0'
+          AND u.is_deleted = '0'
+          AND p.data_status = '1'
+          AND au.is_deleted = '0'
+          AND a.is_deleted = '0'
+          <if test="p.flightDate != null and p.flightDate != ''">
+              AND fw.flight_date = #{p.flightDate}
+          </if>
+          <if test="p.startDate != null and p.startDate != ''">
+              <choose>
+                  <when test="p.startDate == p.endDate">
+                      AND (fw.flight_date BETWEEN #{p.startDate} AND #{p.endDate}
+                      OR DATE_FORMAT(DATE_ADD(CONCAT(fw.flight_date, ' ', fw.flight_time), INTERVAL fw.work_minute MINUTE),'%Y-%m-%d')
+                      BETWEEN #{p.startDate} AND #{p.endDate})
+                  </when>
+                  <otherwise>
+                      AND (fw.flight_date BETWEEN #{p.startDate} AND DATE_ADD(#{p.endDate},INTERVAL 1 DAY)
+                      OR DATE_FORMAT(DATE_ADD(CONCAT(fw.flight_date, ' ', fw.flight_time), INTERVAL fw.work_minute MINUTE),'%Y-%m-%d')
+                      BETWEEN #{p.startDate} AND DATE_ADD(#{p.endDate},INTERVAL 1 DAY))
+                  </otherwise>
+              </choose>
+          </if>
+    </select>
+    <select id="getStrategyFlightByWork" resultType="java.util.Map">
+        SELECT
+          s.uuid AS strategyUuid,
+          s.strategy_name AS strategyName,
+          fw.uuid AS flightWorkUuid,
+          f.flignt_name AS flightName,
+          fw.work_status AS workStatus,
+          DATE_FORMAT(fw.flight_date, '%Y-%m-%d') as flightDate
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN bot_prospect_flight f
+            ON fw.flight_uuid = f.uuid
+          LEFT JOIN bot_collect_strategy s
+            ON f.strategy_id = s.uuid
+        WHERE fw.is_deleted = '0'
+          AND f.is_deleted = '0'
+          AND s.is_deleted = '0'
+          AND fw.work_status != '0'
+          AND fw.work_status != '4'
+        <if test="p.startDate != null and p.startDate != ''">
+            <choose>
+                <when test="p.startDate == p.endDate">
+                    AND (fw.flight_date BETWEEN #{p.startDate} AND #{p.endDate}
+                    OR DATE_FORMAT(DATE_ADD(CONCAT(fw.flight_date, ' ', fw.flight_time), INTERVAL fw.work_minute MINUTE),'%Y-%m-%d')
+                    BETWEEN #{p.startDate} AND #{p.endDate})
+                </when>
+                <otherwise>
+                    AND (fw.flight_date BETWEEN #{p.startDate} AND DATE_ADD(#{p.endDate},INTERVAL 1 DAY)
+                    OR DATE_FORMAT(DATE_ADD(CONCAT(fw.flight_date, ' ', fw.flight_time), INTERVAL fw.work_minute MINUTE),'%Y-%m-%d')
+                    BETWEEN #{p.startDate} AND DATE_ADD(#{p.endDate},INTERVAL 1 DAY))
+                </otherwise>
+            </choose>
+        </if>
+        ORDER BY s.strategy_name, fw.flight_date
+    </select>
+    <select id="getTaskInfoListByFlightWorkId" resultType="java.util.Map">
+        SELECT
+          *
+        FROM
+          (SELECT
+            s.uuid AS sceneUuid,
+            s.s_name AS sceneName,
+            t.uuid,
+            t.t_name AS `name`,
+            'task' AS `type`
+          FROM
+            bot_collect_task t
+            LEFT JOIN bot_collect_scene s
+              ON t.scene_uuid = s.uuid
+            LEFT JOIN bot_collect_flight_task ft
+              ON t.uuid = ft.task_uuid
+            LEFT JOIN bot_prospect_flight_work fw
+              ON ft.flight_uuid = fw.flight_uuid
+          WHERE t.is_deleted = '0'
+            AND s.is_deleted = '0'
+            AND ft.is_deleted = '0'
+            AND fw.is_deleted = '0'
+            AND fw.uuid = #{flightWorkId}
+          GROUP BY s.uuid,
+            s.s_name,
+            t.uuid,
+            t.t_name
+          UNION
+          ALL
+          SELECT
+            s.uuid AS sceneUuid,
+            s.s_name AS sceneName,
+            i.uuid,
+            i.o_name AS `name`,
+            'info' AS `type`
+          FROM
+              bot_collect_info i
+              LEFT JOIN bot_collect_flight_task ft
+                ON i.uuid = ft.collect_uuid
+              LEFT JOIN bot_collect_task t
+                ON ft.task_uuid = t.uuid
+              LEFT JOIN bot_collect_scene s
+                ON s.uuid = t.scene_uuid
+              LEFT JOIN bot_prospect_flight_work fw
+                ON ft.flight_uuid = fw.flight_uuid
+            WHERE i.is_deleted = '0'
+              AND ft.is_deleted = '0'
+              AND t.is_deleted = '0'
+              AND s.is_deleted = '0'
+              AND fw.is_deleted = '0'
+              AND fw.uuid = #{flightWorkId}
+          GROUP BY s.uuid,
+            s.s_name,
+            i.uuid,
+            i.o_name) a
+        ORDER BY a.sceneUuid,
+          a.type
+    </select>
+    <select id="getPersonUavDateByFlightWorkId" resultType="java.util.Map">
+        SELECT
+          p.pname AS personName,
+          u.ename AS uavName,
+          fw.flight_date AS flightDate
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN cle_person p
+            ON fw.person_uuid = p.uuid
+          LEFT JOIN bot_resource_uav u
+            ON fw.uav_uuid = u.uuid
+        WHERE fw.is_deleted = '0'
+          AND p.data_status = '1'
+          AND u.is_deleted = '0'
+          AND fw.uuid = #{flightWorkId}
+    </select>
+    <select id="getTaskInfoListByStrategy" resultType="java.util.Map">
+        SELECT
+          *
+        FROM
+          (SELECT
+            s.uuid AS sceneUuid,
+            s.s_name AS sceneName,
+            t.uuid,
+            t.t_name AS `name`,
+            'task' AS `type`
+          FROM
+            bot_collect_task t
+            LEFT JOIN bot_collect_scene s
+              ON t.scene_uuid = s.uuid
+            LEFT JOIN bot_collect_strategy_task st
+              ON t.uuid = st.task_uuid
+          WHERE t.is_deleted = '0'
+            AND s.is_deleted = '0'
+            AND st.is_deleted = '0'
+            AND st.strategy_uuid =
+            (SELECT
+              s.uuid
+            FROM
+              bot_collect_strategy s
+              LEFT JOIN bot_prospect_flight f
+                ON f.strategy_id = s.uuid
+              LEFT JOIN bot_prospect_flight_work fw
+                ON f.uuid = fw.flight_uuid
+            WHERE f.is_deleted = '0'
+              AND fw.is_deleted = '0'
+              AND fw.uuid = #{flightWorkId})
+          GROUP BY s.uuid,
+            s.s_name,
+            t.uuid,
+            t.t_name
+          UNION
+          ALL
+          SELECT
+            s.uuid AS sceneUuid,
+            s.s_name AS sceneName,
+            i.uuid,
+            i.o_name AS `name`,
+            'info' AS `type`
+          FROM
+            bot_collect_info i
+            LEFT JOIN bot_collect_strategy_task st
+              ON i.uuid = st.collect_uuid
+            LEFT JOIN bot_collect_task t
+              ON st.task_uuid = t.uuid
+            LEFT JOIN bot_collect_scene s
+              ON s.uuid = t.scene_uuid
+          WHERE i.is_deleted = '0'
+            AND st.is_deleted = '0'
+            AND t.is_deleted = '0'
+            AND s.is_deleted = '0'
+            AND st.strategy_uuid =
+            (SELECT
+              s.uuid
+            FROM
+              bot_collect_strategy s
+              LEFT JOIN bot_prospect_flight f
+                ON f.strategy_id = s.uuid
+              LEFT JOIN bot_prospect_flight_work fw
+                ON f.uuid = fw.flight_uuid
+            WHERE f.is_deleted = '0'
+              AND fw.is_deleted = '0'
+              AND fw.uuid = #{flightWorkId})
+          GROUP BY s.uuid,
+            s.s_name,
+            i.uuid,
+            i.o_name) a
+        ORDER BY a.sceneUuid
+    </select>
+    <select id="getUavWorks" resultType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.UavFlightWorkVo">
+	    SELECT
+			fw.uuid as work_id,
+			date_format( fw.flight_date, '%Y-%m-%d' ) AS flight_date ,
+			fw.uav_uuid as uav_id,
+			u.ename as uav_name,
+			fw.person_uuid as person_id,
+			p.pname as person_name,
+			date_format( fw.flight_time, '%Y-%m-%d %H:%i:%s' ) AS flight_time,
+			fw.work_status,
+			fw.work_minute,
+			f.uuid as flight_id,
+			f.flignt_name as flight_name,
+			f.strategy_id,
+			s.strategy_name,
+			f.airport_uuid as airport_id,
+			a.airport_name,
+			f.route_file_uuid,
+			f.mode
+		FROM
+			bot_prospect_flight_work fw 
+			join bot_prospect_flight f on f.uuid=fw.flight_uuid and f.is_deleted=0 and f.route_file_uuid is not null
+			join bot_prospect_airport a on a.uuid=f.airport_uuid and a.is_deleted=0
+			join bot_collect_strategy s on f.strategy_id=s.uuid and s.is_deleted=0
+			join bot_resource_uav u on u.uuid=fw.uav_uuid
+			left join cle_person p on fw.person_uuid=p.uuid
+		WHERE
+			fw.is_deleted = 0
+			<if test="dto.workStatus != null and dto.workStatus != ''">
+			and fw.work_status=#{dto.workStatus}
+			</if>
+			<if test="dto.flightDate != null and dto.flightDate != ''">
+			and fw.flight_date=#{dto.flightDate}
+			</if>
+			<if test="dto.uavId != null and dto.uavId != ''">
+			and fw.uav_uuid=#{dto.uavId}
+			</if>
+			<if test="dto.personId != null and dto.personId != ''">
+			and fw.person_uuid=#{dto.personId}
+			</if>
+			<if test="dto.airportId != null and dto.airportId != ''">
+			and a.uuid=#{dto.airportId}
+			</if>
+			<if test="dto.strategyId != null and dto.strategyId != ''">
+			and s.uuid=#{dto.strategyId}
+			</if>
+			<if test="dto.flightName != null and dto.flightName != ''">
+			and f.flignt_name like CONCAT('%',#{dto.flightName},'%')	
+			</if>
+			<if test="dto.workId != null and dto.workId != ''">
+			and fw.uuid=#{dto.workId}
+			</if>
+    </select>
+    <select id="getWorkResultByFlightWorkId" resultType="java.util.Map">
+        SELECT
+          COUNT(DISTINCT w.warning_type) AS typeCount,
+          COUNT(w.uuid) AS warningCount
+        FROM
+          bot_event_warning w
+        WHERE w.is_deleted = '0'
+          AND w.flight_task_uuid = #{flightWorkId}
+    </select>
+    <select id="getWarningListByFlightWorkId" resultType="java.util.Map">
+        SELECT
+          i.o_name AS infoName,
+          w.warning_name AS warningName,
+          w.address,
+          w.accuracy,
+          (SELECT DISTINCT
+            cb.file_id
+          FROM
+            cb_file_bus cb
+          WHERE cb.bus_id = w.uuid
+            AND cb.module = 'base_img_warn') AS baseImgFileId,
+          (SELECT DISTINCT
+            cb.file_id
+          FROM
+            cb_file_bus cb
+          WHERE cb.bus_id = w.uuid
+            AND cb.module = 'warning_img') AS warningImgFileId
+        FROM
+          bot_event_warning w
+        LEFT JOIN bot_collect_info i
+            ON i.uuid = w.collect_object_uuid
+        WHERE w.is_deleted = '0'
+          AND i.is_deleted = '0'
+          AND w.flight_task_uuid = #{flightWorkId}
+    </select>
+    
+    <select id="getObjAndTaskByFight" resultMap="objAndTasksMap">
+    SELECT
+		i.o_name object_name,
+		i.uuid object_id,
+		g.lnglats,
+		t.uuid task_id,
+		t.t_name task_name,
+		ai.uuid algorithm_id,
+		ai.algorithm_name
+	FROM
+		bot_collect_flight_task ft 
+	join bot_collect_info i on i.uuid=ft.collect_uuid and i.is_deleted=0
+	join bot_collect_geography g on g.busi_id=i.uuid and g.busi_type='bot_collect_info' and g.geo_type='polygon' and g.is_deleted=0
+	join bot_collect_task t on ft.task_uuid=t.uuid and t.is_deleted=0
+	join bot_algorithm_task att on att.collect_task_uuid=t.uuid and att.is_deleted=0
+	join bot_algorithm_info ai on ai.uuid=att.algorithm_info_uuid and ai.is_deleted=0 and ai.business_status='3'
+	WHERE
+		ft.is_deleted =0
+		and ft.flight_uuid=#{flightUuid}
+    </select>
+    
+    <select id="getFightNameAndEname" resultType="HashMap">
+    SELECT
+		f.flignt_name,
+		u.ename 
+	FROM
+		bot_prospect_flight_work fw
+		LEFT JOIN bot_prospect_flight f ON fw.flight_uuid = f.uuid
+		LEFT JOIN bot_resource_uav u ON u.is_deleted = 0 
+	WHERE
+		fw.uuid = #{workId} 
+		AND u.uuid = #{uavId}
+    </select>
+    <select id="getUrgentNameAndEname" resultType="HashMap">
+    SELECT
+		fw.urgent_name flignt_name,
+		u.ename 
+	FROM
+		bot_event_urgent fw
+		LEFT JOIN bot_resource_uav u ON u.is_deleted = 0 
+	WHERE
+		fw.uuid = #{workId} 
+		AND u.uuid = #{uavId}
+    </select>
+    <!--  根据任务id，查询车辆，人数
+	ct.collect_result = '2'  -->
+     <select id="getMonitorCarNumber" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.FlightWorkInfoVo">
+	   SELECT
+	   	fw.uuid as workUuid,
+		f.flignt_name AS flightName,
+		fw.work_minute/60 as workMinute,
+		ci.o_name AS collectName,
+		ft.collect_uuid as collectUuid,
+		ft.task_uuid as taskUuid
+	FROM
+		bot_prospect_flight_work fw
+		LEFT JOIN bot_prospect_flight f ON f.uuid = fw.flight_uuid
+		LEFT JOIN bot_collect_flight_task ft ON ft.flight_uuid = f.uuid
+		LEFT JOIN bot_collect_info ci ON ci.uuid = ft.collect_uuid 
+	WHERE fw.work_minute is not null 
+	<if test="p.taskUuid != null and p.taskUuid != '' ">
+				and ft.task_uuid = #{p.taskUuid}
+	</if>
+	<if test="p.timeType == 'day'">
+			and TO_DAYS(fw.flight_date) = TO_DAYS(NOW())
+	</if>
+	<if test="p.timeType == 'week'">
+			and YEARWEEK(DATE_FORMAT(fw.flight_date,'%Y-%m-%d')) = YEARWEEK(NOW())
+	</if>
+	<if test="p.timeType == 'month'">
+			and DATE_FORMAT(fw.flight_date,'%Y%m') = DATE_FORMAT(CURDATE(),'%Y%m') 
+	</if>
+	<if test="p.timeType == 'quarter'">
+			and QUARTER(fw.flight_date) = QUARTER(NOW())
+	</if>
+	<if test="p.timeType == 'year'">
+			and YEAR(fw.flight_date) = YEAR(NOW())
+	</if>
+	order by fw.flight_date asc 
+    </select>
+    
+    <!-- 获取堆叠折线图和 柱状图的数据-->
+     <select id="getEchartData" resultMap="echartDataMap">
+	   SELECT
+	   	i.o_name as collectName, DATE_FORMAT(fw.flight_date,'%Y-%m-%d') as flightDate ,r.rs_value as rsValue 
+		FROM
+		bot_collect_info i
+		left join bot_collect_strategy_task st on i.uuid = st.collect_uuid 
+		left JOIN bot_collect_flight_task ft ON ft.collect_uuid = i.uuid and ft.task_uuid = st.task_uuid 
+		left join bot_prospect_flight_work fw on ft.flight_uuid = fw.flight_uuid 
+		 join bot_collect_result r on r.work_id = fw.uuid and r.collect_id = i.uuid
+	WHERE r.rs_type = 'int' 
+	<if test="p.taskUuid != null and p.taskUuid != '' ">
+			and ft.task_uuid = #{p.taskUuid}
+	</if>
+	<if test="p.strategyUuid != null and p.strategyUuid != '' ">
+			and st.strategy_uuid = #{p.strategyUuid}
+	</if>
+	<if test="p.rsKey != null and p.rsKey != '' ">
+			and r.rs_key = #{p.rsKey}
+	</if>
+	<if test="p.collectList != null and p.collectList != ''">
+            AND i.uuid in
+            <foreach collection="p.collectList" item="item" index="index"
+                     open="(" close=")" separator=",">
+                #{item}
+            </foreach>
+        </if>
+	<if test="p.timeType == 'day'">
+			and TO_DAYS(fw.flight_date) = TO_DAYS(NOW())
+	</if>
+	<if test="p.timeType == 'week'">
+			and YEARWEEK(DATE_FORMAT(fw.flight_date,'%Y-%m-%d')) = YEARWEEK(NOW())
+	</if>
+	<if test="p.timeType == 'month'">
+			and DATE_FORMAT(fw.flight_date,'%Y%m') = DATE_FORMAT(CURDATE(),'%Y%m') 
+	</if>
+	<if test="p.timeType == 'quarter'">
+			and QUARTER(fw.flight_date) = QUARTER(NOW())
+	</if>
+	<if test="p.timeType == 'year'">
+			and YEAR(fw.flight_date)=YEAR(NOW())
+	</if>
+	order by fw.flight_date asc
+    </select>
+    
+     <select id="getMapAddressInfoData" resultMap="mapAddressInfoData">
+	  SELECT
+		i.o_name AS collectName,
+		w.warning_name as warningName,
+		DATE_FORMAT( fw.flight_date, '%Y-%m-%d' ) AS flightDate,
+		r.rs_value AS rsValue,
+		w.warning_type AS eventType,
+		g.lng,
+		g.lat,
+		i.o_address AS address ,
+		w.latitude,
+		w.longitude
+	FROM
+		bot_collect_info i
+		JOIN bot_collect_geography g ON g.busi_id = i.uuid 
+		AND g.busi_type = 'bot_collect_info'
+		JOIN bot_event_warning w ON w.collect_object_uuid = i.uuid
+		JOIN bot_collect_strategy_task st ON i.uuid = st.collect_uuid
+		JOIN bot_collect_flight_task ft ON ft.collect_uuid = i.uuid 
+		AND ft.task_uuid = st.task_uuid
+		JOIN bot_prospect_flight_work fw ON ft.flight_uuid = fw.flight_uuid
+		JOIN bot_collect_result r ON r.work_id = fw.uuid 
+		AND r.collect_id = i.uuid 
+WHERE
+	r.rs_type = 'int' 
+	<if test="p.taskUuid != null and p.taskUuid != '' ">
+			and ft.task_uuid = #{p.taskUuid}
+	</if>
+	<if test="p.rsKey != null and p.rsKey != '' ">
+			and r.rs_key = #{p.rsKey}
+	</if>
+	<if test="p.timeType == 'day'">
+			and TO_DAYS(fw.flight_date) = TO_DAYS(NOW())
+	</if>
+	<if test="p.timeType == 'week'">
+			and YEARWEEK(DATE_FORMAT(fw.flight_date,'%Y-%m-%d')) = YEARWEEK(NOW())
+	</if>
+	<if test="p.timeType == 'month'">
+			and DATE_FORMAT(fw.flight_date,'%Y%m') = DATE_FORMAT(CURDATE(),'%Y%m') 
+	</if>
+	<if test="p.timeType == 'quarter'">
+			and QUARTER(fw.flight_date) = QUARTER(NOW())
+	</if>
+	<if test="p.timeType == 'year'">
+			and YEAR(fw.flight_date)=YEAR(NOW())
+	</if>
+	GROUP BY
+	i.o_name,
+	fw.flight_date,
+	r.rs_value,
+	w.warning_type,
+	g.lng,
+	g.lat,
+	i.o_address,
+	w.latitude,
+		w.longitude
+    </select>
+    
+    <select id="getUrgentWorkVo" resultType="com.chinobot.aiuas.bot_event.urgent.entity.vo.UrgentWorkVo">
+    SELECT
+		eu.uuid work_id,
+		'2' work_type,
+		eu.urgent_name,
+		eu.target_lnglat,
+		eu.target_address,
+		eu.fly_distance,
+		eu.speed_second,
+		date_format( eu.arrival_time, '%Y-%m-%d' ) arrival_time,
+		eu.remark,
+		eu.route_file_id,
+		eu.work_status,
+		eu.fly_speed,
+		eu.fly_height,
+		date_format( eu.create_time, '%Y-%m-%d' ) create_time,
+		eu.uav_id,
+		ru.ename uav_name,
+		eu.person_id,
+		p.pname
+	FROM
+		bot_event_urgent eu 
+		left join bot_resource_uav ru on ru.uuid=eu.uav_id
+		left join cle_person p on p.uuid=eu.person_id
+	WHERE
+		eu.uuid=#{uuid}
+    </select>
+    
+    <select id="getCollectData" resultMap="collectDataRsMap">
+    SELECT
+		cr.work_id,
+		cr.collect_id,
+		ci.o_name collect_name,
+		substr(cr2.rs_value, 11, 9) start_time,
+		substr(cr3.rs_value, 11, 9) end_time,
+		cr.rs_key rs_key,
+		cr.remark title,
+		IFNULL( b.fieldname, cr.rs_value ) val,
+		cr.base_data_code 
+	FROM
+		bot_collect_result cr
+		LEFT JOIN bot_collect_result cr2 ON cr2.work_id = cr.work_id 
+		AND cr2.rs_key = 'startTime' 
+		AND cr2.collect_id = cr.collect_id
+		LEFT JOIN bot_collect_result cr3 ON cr3.work_id = cr.work_id 
+		AND cr3.rs_key = 'endTime' 
+		AND cr3.collect_id = cr.collect_id
+		LEFT JOIN bot_collect_info ci ON ci.uuid = cr.collect_id 
+		LEFT JOIN cb_basedata b ON b.data_status = '1' 
+		AND b.typecode = cr.base_data_code 
+		AND b.fieldcode = cr.rs_value 
+	WHERE
+		cr.work_id = #{workId}
+		AND cr.rs_key != 'startTime' 
+		AND cr.rs_key != 'endTime'
+		ORDER BY collect_id, cr.rs_key
+    </select>
+    <select id="getRouteByFlightWork" resultType="java.util.Map">
+        SELECT
+          f.route_lnglats AS line,
+          fw.uuid AS task_id,
+          "1" AS workType,
+          flight_time AS workStartTime,
+          f.route_file_uuid as routeFileUuid
+        FROM
+          bot_prospect_flight_work fw
+          LEFT JOIN bot_prospect_flight f
+            ON f.uuid = fw.flight_uuid
+        WHERE fw.is_deleted = '0'
+        AND f.is_deleted = '0'
+        AND fw.uuid = #{flightWorkId}
+    </select>
+    <select id="getWorkCountByMonth" resultType="java.util.Map">
+        SELECT
+            DATE_FORMAT(fw.flight_date, '%Y-%m-%d') AS `date`,
+            CASE WHEN fw.flight_date > NOW() THEN 'mark1' ELSE 'mark2' END AS className,
+            fw.flight_date AS `time`
+        FROM
+          bot_prospect_flight_work fw
+        WHERE fw.is_deleted = '0'
+        AND MONTH(fw.flight_date) = #{month}
+        <if test="workStatus != null and workStatus.length > 0">
+            AND fw.work_status in
+            <foreach collection="workStatus" item="item" index="index"
+                     open="(" close=")" separator=",">
+                #{item}
+            </foreach>
+        </if>
+        GROUP BY fw.flight_date
+    </select>
+</mapper>

@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_resource.grid.mapper.ReGridMapper">
+    <resultMap type="com.chinobot.aiuas.bot_resource.grid.entity.vo.GridGeographyVo" id="GridGeographyMap">
+        <association property="grid" javaType="com.chinobot.aiuas.bot_resource.grid.entity.vo.GridVo">
+            <id column="uuid" property="uuid"/>
+            <result column="name" property="name"/>
+            <result column="content" property="content"/>
+            <result column="dept_id" property="deptId"/>
+<!--            <result column="create_by" property="createBy"/>-->
+<!--            <result column="create_time" property="createTime"/>-->
+<!--            <result column="operate_by" property="operateBy"/>-->
+<!--            <result column="operate_time" property="operateTime"/>-->
+<!--            <result column="is_deleted" property="isDeleted"/>-->
+        </association>
+        <association property="geography" javaType="com.chinobot.aiuas.bot_collect.info.entity.dto.GeographyDTO">
+            <id column="geographyId" property="geographyId"/>
+            <result column="lng" property="lng"/>
+            <result column="lat" property="lat"/>
+            <result column="lnglats" property="lnglats"/>
+        </association>
+
+    </resultMap>
+    <update id="delGridByDeptId">
+        UPDATE
+          bot_resource_grid g
+          LEFT JOIN bot_collect_geography cg
+            ON g.uuid = cg.busi_id
+            AND cg.busi_type = 'bot_resource_grid'
+        SET g.is_deleted = '1',
+          cg.is_deleted = '1'
+        WHERE g.dept_id = #{deptId}
+    </update>
+    <select id="getPage"
+            resultType="com.chinobot.aiuas.bot_resource.grid.entity.vo.GridVo">
+        SELECT
+          g.uuid,
+          g.name,
+          g.content,
+          g.dept_id as deptId,
+          g.create_by as createBy,
+          g.create_time as createTime,
+          g.operate_by as operateBy,
+          g.operate_time as operateTime,
+          p.pname as createName,
+          p.pname as operateName,
+          cg.uuid as geographyId
+--           g.is_deleted as isDeleted
+        FROM
+          bot_resource_grid g
+        LEFT JOIN bot_collect_geography cg
+            ON g.uuid = cg.busi_id
+            AND cg.busi_type = 'bot_resource_grid'
+            AND cg.is_deleted = '0'
+        LEFT JOIN cle_person p
+            ON g.create_by = p.uuid
+            AND p.data_status = '1'
+        LEFT JOIN cle_person p2
+            ON g.operate_by = p2.uuid
+            AND p2.data_status = '1'
+        WHERE g.is_deleted = '0'
+        <if test="p.deptId != null and p.deptId != ''">
+            AND g.dept_id = #{p.deptId}
+        </if>
+        <if test="p.name != null and p.name != ''">
+            AND g.name like CONCAT('%', #{p.name}, '%')
+        </if>
+        ORDER BY g.operate_time DESC
+    </select>
+    <select id="getInfo" resultMap="GridGeographyMap">
+        SELECT
+          g.uuid,
+          g.name,
+          g.content,
+          g.dept_id,
+--           g.create_by,
+--           g.create_time,
+--           g.operate_by,
+--           g.operate_time,
+--           g.is_deleted,
+          cg.uuid AS geographyId,
+          cg.lng,
+          cg.lat,
+          cg.lnglats
+        FROM
+          bot_resource_grid g
+          LEFT JOIN bot_collect_geography cg
+            ON g.uuid = cg.busi_id
+            AND cg.busi_type = 'bot_resource_grid'
+            AND cg.is_deleted = '0'
+        WHERE g.is_deleted = '0'
+        <if test="gridId != null and gridId != ''">
+            AND g.uuid = #{gridId}
+        </if>
+    </select>
+    <select id="getAroundGrid" resultMap="GridGeographyMap">
+        SELECT
+          g.uuid,
+          g.name,
+          g.content,
+          cg.lng,
+          cg.lat,
+          cg.lnglats
+        FROM
+          bot_resource_grid g
+          LEFT JOIN bot_collect_geography cg
+            ON g.uuid = cg.busi_id
+            AND cg.busi_type = 'bot_resource_grid'
+        WHERE g.is_deleted = '0'
+          AND cg.is_deleted = '0'
+          AND g.dept_id = #{p.deptId}
+          <if test="p.gridId != null and p.gridId != ''">
+            AND g.uuid != #{p.gridId}
+          </if>
+          AND cg.lng IS NOT NULL
+          AND cg.lat IS NOT NULL
+          AND cg.lng BETWEEN #{p.minLng} AND #{p.maxLng}
+          AND cg.lat BETWEEN #{p.minLat} AND #{p.maxLat}
+    </select>
+    
+    <select id="findGridForEvent" resultType="com.chinobot.aiuas.bot_prospect.warning2info.entity.dto.DeptGridDTO">
+    SELECT
+	d.uuid as dept_id, rg.uuid as grid_id
+FROM
+	cle_dept d
+	JOIN bot_resource_grid rg ON rg.dept_id = d.uuid 
+	AND rg.is_deleted = 0
+	JOIN bot_geo_single gs ON gs.busi_id=rg.uuid AND gs.busi_type = 'bot_resource_grid'
+	where d.data_status='1' and d.organization=#{p.organization}
+	and ST_Intersects(gs.shape, GeomFromText(CONCAT('POINT(',#{p.lng},' ',#{p.lat},')'), 4326))=1
+    </select>
+    <select id="findAreaForEvent" resultType="com.chinobot.aiuas.bot_prospect.warning2info.entity.dto.DeptAreaDTO">
+    SELECT
+	ga.id as area_id, d.uuid as dept_id
+FROM
+	p_gov_area ga 
+	 join bot_geo_collection gc on gc.busi_id=ga.id and gc.busi_type='p_gov_area'
+	 join cle_dept d on d.area_id=ga.id
+WHERE
+	ga.LEVEL = #{p.level}
+	AND d.organization=#{p.organization}
+	AND ga.data_status = '1'
+	and ST_Intersects(gc.shape, GeomFromText(CONCAT('POINT(',#{p.lng},' ',#{p.lat},')'), 4326))=1
+    </select>
+</mapper>

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.base.mapper.SceneTaskTempletMapper">
+
+	<select id="getTaskTemplet" resultType="map">
+	   SELECT
+		  tt.uuid,
+		  tt.scene_type AS sceneType,
+		  tt.tname,
+		  tt.content,
+		  tt.tindex,
+		  tt.tvalue,
+		  tt.dept_id AS deptId,
+		  tt.level,
+		  IFNULL(tt.push_way,"") pushWay,
+		  d.dname
+		 FROM
+		  cle_scene_task_templet tt
+         LEFT JOIN cle_dept d
+	       ON tt.dept_id = d.uuid
+	      AND d.data_status = '1'
+        WHERE 1 = 1
+      <if test="p.dataStatus != null and p.dataStatus != ''">
+          AND tt.data_status = #{p.dataStatus}
+      </if>
+      <if test="p.uuid != null and p.uuid != ''">
+          AND tt.uuid = #{p.uuid}
+      </if>
+      <if test="p.sceneType != null and p.sceneType != ''">
+      	and tt.scene_type =#{p.sceneType} 
+      </if>
+      <if test="p.tname != null and p.tname != ''">
+          AND tt.tname LIKE CONCAT('%', #{p.tname}, '%')
+      </if>
+      <if test="p.deptId != null and p.deptId != ''">
+          AND tt.dept_id LIKE CONCAT('%', #{p.deptId}, '%')
+      </if>
+      <if test="p.deptName != null and p.deptName != ''">
+          AND d.dname LIKE CONCAT('%', #{p.deptName}, '%')
+      </if>
+      <if test="p.level != null and p.level != ''">
+     		and tt.level =#{p.level}
+		  	
+      </if>
+    </select>
+    <!-- 分页查询 -->
+    <select id="getTaskTempletByPage" resultType="map">
+	   SELECT
+		  tt.uuid,
+		  tt.scene_type AS sceneType,
+		  tt.tname,
+		  tt.content,
+		  tt.tindex,
+		  tt.tvalue,
+		  tt.dept_id AS deptId,
+		  tt.level,
+		  d.dname
+		 FROM
+		  cle_scene_task_templet tt
+         LEFT JOIN cle_dept d
+	       ON tt.dept_id = d.uuid
+	      AND d.data_status = '1'
+        WHERE 1 = 1
+      <if test="p.dataStatus != null and p.dataStatus != ''">
+          AND tt.data_status = #{p.dataStatus}
+      </if>
+      <if test="p.uuid != null and p.uuid != ''">
+          AND tt.uuid = #{p.uuid}
+      </if>
+      <if test="p.sceneType != null and p.sceneType != ''">
+      	and tt.scene_type in 
+		  	<foreach collection="p.sceneType" item="sceneType" index="index"  
+	            open="(" close=")" separator=",">  
+	            #{sceneType}  
+        	</foreach> 
+      </if>
+      <if test="p.tname != null and p.tname != ''">
+          AND tt.tname LIKE CONCAT('%', #{p.tname}, '%')
+      </if>
+      <if test="p.deptId != null and p.deptId != ''">
+          AND tt.dept_id LIKE CONCAT('%', #{p.deptId}, '%')
+      </if>
+      <if test="p.deptName != null and p.deptName != ''">
+          AND d.dname LIKE CONCAT('%', #{p.deptName}, '%')
+      </if>
+      <if test="p.level != null and p.level != ''">
+     		and tt.level in 
+		  	<foreach collection="p.level" item="level" index="index"  
+	            open="(" close=")" separator=",">  
+	            #{level}  
+        	</foreach> 
+      </if>
+       ORDER BY  tt.scene_type,tt.level ASC  
+    </select>
+</mapper>

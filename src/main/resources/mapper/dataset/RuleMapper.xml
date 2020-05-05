@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.dataset.mapper.RuleMapper">
+	
+	<resultMap type="com.chinobot.plep.home.dataset.entity.dto.RuleDto" id="ruleDtoResultMap">
+		<id column="uuid" property="uuid"/>
+		<result column="set_id" property="setId"/>
+		<result column="task_id" property="taskId"/>
+		<result column="priority" property="priority"/>
+		<result column="is_global" property="isGlobal"/>
+		<collection property="groups" ofType="com.chinobot.plep.home.dataset.entity.dto.RuleGroupDto">
+			<id column="group_num" property="groupNum"/>
+			<result column="group_type" property="groupType"/>
+			<collection property="fields" ofType="com.chinobot.plep.home.dataset.entity.dto.RuleMetadataDto">
+				<id column="detail_id" property="detailId"/>
+				<result column="relation_type" property="relationType"/>
+				<result column="compare_type" property="compareType"/>
+				<result column="compare_value" property="compareValue"/>
+				<result column="field" property="field"/>
+				<result column="field_type" property="fieldType"/>
+				<result column="inner_sort" property="innerSort"/>
+			</collection>
+		</collection>
+	</resultMap>
+			
+	<select id="getRuleList" resultType="map">
+		 SELECT
+			r.uuid,
+			r.`name`,
+			r.decribe,
+			ds.`name` AS dataSetName,
+			pe.pname,
+			r.operate_time AS operateTime,
+			r.status,
+			r.scene_id,
+			r.is_global as isGlobal 
+		FROM
+			p_rule r
+		LEFT JOIN p_data_set ds ON r.set_id = ds.uuid
+		LEFT JOIN cle_person pe ON r.operate_by = pe.uuid
+		WHERE
+			r.data_status = '1'
+		<if test="p.sceneId != null and p.sceneId != ''">
+			And r.scene_id = #{p.sceneId}
+		</if>
+		<if test="p.taskId != null and p.taskId != ''">
+			And r.task_id = #{p.taskId}
+		</if>
+		ORDER BY
+			r.operate_time DESC
+	</select>
+	
+	<select id="getRuleDetails" resultType="map">
+		SELECT
+			rd.relation_type AS relationType,
+			rd.field,
+			rd.set_id,
+			rd.compare_type AS compareType,
+			rd.compare_value AS compareValue,
+			rd.group_num AS groupNum,
+			rd.inner_sort AS innerSort,
+			rd.group_type AS groupType
+		FROM
+			p_rule_detail rd
+		WHERE
+			rd.data_status = '1'
+		AND rule_id = #{uuid}
+		ORDER BY
+			rd.group_num ASC,
+			rd.inner_sort ASC
+		
+	</select>
+	<select id="getAllRuleDto" resultMap="ruleDtoResultMap">
+	SELECT
+	r.uuid,
+	r.set_id,
+	r.task_id,
+	r.priority,
+	r.is_global,
+	rd.group_num,
+	rd.group_type,
+	rd.relation_type,
+	rd.compare_value,
+	rd.compare_type,
+	rd.uuid AS detail_id,
+	rd.inner_sort,
+	m.field_type_num AS field_type,
+	m.field 
+FROM
+	p_rule r
+	LEFT JOIN p_rule_detail rd ON rd.rule_id = r.uuid 
+	AND rd.data_status = '1'
+	LEFT JOIN p_metadata m ON m.set_id = rd.set_id 
+	AND m.field = rd.field 
+	AND m.data_status = '1' 
+WHERE
+	r.data_status = '1' 
+	AND r.STATUS = '1' 
+	AND r.set_id IS NOT NULL 
+	AND rd.group_num IS NOT NULL 
+	AND m.field_type_num IS NOT NULL 
+	AND m.field IS NOT NULL 
+ORDER BY
+	r.uuid,
+	rd.group_num ASC,
+	rd.inner_sort ASC
+	</select>
+</mapper>

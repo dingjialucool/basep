@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.flyPlan.mapper.FlyPlanMapper">
+
+	<!--获取巡查计划列表  -->
+	<select id="getFlyPlanList" resultType="map">
+		SELECT
+			*
+		FROM
+			(
+				SELECT
+					fp.uuid,
+					fp.time_start,
+					fp.time_end,
+					fp.strategy,
+					fp.`status`,
+					fp.special_type,
+					fp.plan_type,
+					fp.operate_time,
+					fp.`name`,
+					fp.dept_id,
+					fp.cycle_unit,
+					fp.cycle,
+					fp.use_status,
+					ra.`name` AS rang,
+					ra.uuid AS rangId,
+					pr.uuid AS planRangId,
+					IFNULL(s.sss, 0) AS ddd,
+					CASE fp.cycle_unit
+				WHEN '1' THEN
+					'小时'
+				WHEN '2' THEN
+					'天'
+				WHEN '3' THEN
+					'周'
+				ELSE
+					'/'
+				END AS zCycle
+				FROM
+					p_fly_plan fp
+				LEFT JOIN p_plan_range pr ON pr.plan_id = fp.uuid
+				AND pr.data_status = '1'
+				LEFT JOIN p_range ra ON ra.uuid = pr.range_id
+				AND ra.data_status = '1'
+				LEFT JOIN (
+					SELECT
+						uuid,
+						1 AS sss
+					FROM
+						p_fly_plan
+					WHERE
+						date(NOW()) BETWEEN date(time_start)
+					AND DATE(time_end)
+				) s ON s.uuid = fp.uuid
+				WHERE
+					fp.data_status = '1'
+				AND ra.uuid IS NOT NULL
+				UNION ALL
+					SELECT
+						fp.uuid,
+						fp.time_start,
+						fp.time_end,
+						fp.strategy,
+						fp.`status`,
+						fp.special_type,
+						fp.plan_type,
+						fp.operate_time,
+						fp.`name`,
+						fp.dept_id,
+						fp.cycle_unit,
+						fp.cycle,
+						fp.use_status,
+						ra.`name` AS rang,
+						ra.uuid AS rangId,
+						pr.uuid AS planRangId,
+						IFNULL(s.sss, 0) AS ddd,
+						CASE fp.cycle_unit
+					WHEN '1' THEN
+						'小时'
+					WHEN '2' THEN
+						'天'
+					WHEN '3' THEN
+						'周'
+					ELSE
+						'/'
+					END AS zCycle
+					
+				FROM
+					p_fly_plan fp
+				LEFT JOIN p_plan_building pr ON pr.plan_id = fp.uuid
+				AND pr.data_status = '1'
+				LEFT JOIN p_building ra ON ra.uuid = pr.building_id
+				AND ra.data_status = '1'
+				LEFT JOIN (
+					SELECT
+						uuid,
+						1 AS sss
+					FROM
+						p_fly_plan
+					WHERE
+						date(NOW()) BETWEEN date(time_start)
+					AND DATE(time_end)
+				) s ON s.uuid = fp.uuid
+				WHERE
+					fp.data_status = '1'
+				AND ra.uuid IS NOT NULL
+			) s
+			where 1 = 1
+		<if test="param.planRangId != null and param.planRangId !=''">
+        and s.planRangId = #{param.planRangId}
+        </if>
+        <if test="param.deptId != null and param.deptId !=''">
+        and s.dept_id = #{param.deptId}
+        </if>
+        <if test="param.uuid != null and param.uuid !=''">
+        and s.uuid = #{param.uuid}
+        </if>
+		<if test="param.name != null and param.name !=''">
+        and s.name like CONCAT(CONCAT('%',#{param.name}),'%')
+        </if>
+        <if test="param.rangName != null and param.rangName !=''">
+        and s.rang like CONCAT(CONCAT('%',#{param.rangName}),'%')
+        </if>
+        <if test="param.planType != null and param.planType !=''">
+  			and s.plan_type in 
+  			<foreach collection="param.planType" item="type" index="index"  
+	          open="(" close=")" separator=",">  
+	          #{type}  
+      		</foreach> 
+        </if>	
+        <if test="param.strategy != null and param.strategy !=''">
+  			and s.strategy in 
+  			<foreach collection="param.strategy" item="type" index="index"  
+	          open="(" close=")" separator=",">  
+	          #{type}  
+      		</foreach> 
+        </if>
+        <if test="param.playStatus != null and param.playStatus !=''">
+  			and s.status in 
+  			<foreach collection="param.playStatus" item="type" index="index"  
+	          open="(" close=")" separator=",">  
+	          #{type}  
+      		</foreach> 
+        </if>
+	        ORDER BY
+		s.operate_time DESC
+	</select>
+	
+	<!--获取生成飞行任务所需的区域  -->
+	<select id="getArea" parameterType="string" resultType="map">
+		SELECT
+			fp.uuid as planId,
+			pe.uuid AS rangId,
+			pa.uuid AS areaId
+		FROM
+			p_fly_plan fp
+		LEFT JOIN p_plan_range pr ON pr.plan_id = fp.uuid
+		AND pr.data_status = '1'
+		LEFT JOIN p_range pe ON pe.uuid = pr.range_id
+		AND pe.data_status = '1'
+		LEFT JOIN p_fly_area pa ON pa.rang_id = pe.uuid
+		AND pa.data_status = '1'
+		WHERE
+			fp.data_status = '1'
+		AND pa.uuid IS NOT NULL 
+		AND fp.uuid = #{uuid} 
+		
+	</select>
+	
+	<!--获取生成飞行任务所需的对象  -->
+	<select id="getBuild" parameterType="string" resultType="map">
+		SELECT
+			fp.uuid AS planId,
+			pa.uuid AS buildId
+		FROM
+			p_fly_plan fp
+		LEFT JOIN p_plan_building pr ON pr.plan_id = fp.uuid
+		AND pr.data_status = '1'
+		LEFT JOIN p_building pa ON pa.uuid = pr.building_id
+		AND pa.data_status = '1'
+		WHERE
+			fp.data_status = '1'
+		AND pa.uuid IS NOT NULL
+		AND fp.uuid = #{uuid}
+	</select>
+	
+	<!--获取当前部门下的巡查范围  -->
+	<select id="getRangeData"  resultType="com.chinobot.plep.home.plan.entity.Range">
+		SELECT
+			pr.*
+		FROM
+			p_range pr
+		LEFT JOIN p_range_dept de ON de.range_id = pr.uuid
+		AND de.data_status = '1'
+		WHERE
+			pr.data_status = '1'
+		<if test="p.deptId != null and p.deptId !=''">
+        	and de.dept_id = #{p.deptId}
+        </if>
+	</select>
+	
+	<!--获取当前部门下的巡查建筑  -->
+	<select id="getBuildingData"  resultType="com.chinobot.plep.home.building.entity.Building">
+		SELECT
+			pb.*
+		FROM
+			p_building pb
+		LEFT JOIN cle_dept_grid de ON de.grid_id = pb.uuid
+		AND de.data_status = '1'
+		WHERE
+			pb.data_status = '1'
+		<if test="p.deptId != null and p.deptId !=''">
+        	and de.dept_id = #{p.deptId}
+        </if>
+	</select>
+</mapper>

@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.strategy.mapper.StrategyMapper">
+	<resultMap type="com.chinobot.aiuas.bot_collect.strategy.entity.vo.DomainWithSceneVO" id="listAllDomainAndSceneRsMap">
+		<id column="uuid" property="domainId"/>
+		<result column="d_name" property="domainName"/>
+		<collection property="scenes" ofType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.SceneOfDomainVo">
+			<id column="scene_id" property="sceneId"/>
+			<result column="domain_uuid" property="domainId"/>
+			<result column="s_name" property="sceneName"/>
+		</collection>
+	</resultMap>
+	<resultMap type="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategyDetailVO" id="getStrategyDetailRsMap" autoMapping="true">
+		<id column="strategy_id" property="strategyId"/>
+		<collection property="scenes" ofType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.SceneWithIdsVO" autoMapping="true">
+			<id column="scene_id" property="sceneId"/>
+			<collection property="taskIds" ofType="string">
+				<constructor>
+		            <arg column="task_uuid"/>
+		        </constructor>
+			</collection>
+			<collection property="infoIds" ofType="string">
+				<constructor>
+		            <arg column="collect_uuid"/>
+		        </constructor>
+			</collection>
+		</collection>
+	</resultMap>
+	<resultMap type="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategySpecialVO" id="specialStrategyDetailRsMap" autoMapping="true">
+		<id column="strategy_id" property="strategyId"/>
+		<collection property="nodes" ofType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.SpecialStrategyNodeVo" autoMapping="true">
+			<id column="node_id" property="nodeId"/>
+			<association property="flight"  javaType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.FlightDeatilVO" autoMapping="true">
+				<id column="flight_id" property="flightId"/>
+			</association>
+		</collection>
+	</resultMap>
+	
+	<resultMap type="com.chinobot.aiuas.bot_collect.strategy.entity.vo.FlightDeatilVO" id="listFlightRsMap">
+		<id column="flight_id" property="flightId"/>
+		<result column="flight_name" property="flightName"/>
+		<collection property="tasks" ofType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.IdNameVo">
+			<id column="t_id" property="uuid"/>
+			<result column="t_name" property="name"/>
+		</collection>
+		<collection property="infos" ofType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.IdNameVo">
+			<id column="o_id" property="uuid"/>
+			<result column="o_name" property="name"/>
+		</collection>
+	</resultMap>
+	
+	
+	<select id="pageStrategy" resultType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.PageStrategyVO">
+		SELECT
+			s.uuid 'strategy_id',
+			s.strategy_name,
+			s.strategy_type,
+			s.strategy_value,
+			s.business_status 
+		FROM
+			bot_collect_strategy s 
+		WHERE
+			s.is_deleted =0
+			<if test="dto.nameLike != null and dto.nameLike != ''">
+			and s.strategy_name like CONCAT('%',#{dto.nameLike},'%')
+			</if>
+			<if test="dto.typeEq != null and dto.typeEq != ''">
+			and s.strategy_type = #{dto.typeEq}
+			</if>
+			<if test="dto.statusEq != null and dto.statusEq != ''">
+			and s.business_status = #{dto.statusEq}
+			</if>
+	</select>
+	
+	<select id="listAllDomainAndScene" resultMap="listAllDomainAndSceneRsMap">
+	SELECT
+		d.uuid,
+		d.d_name,
+		s.uuid 'scene_id',
+		s.domain_uuid,
+		s.s_name 
+	FROM
+		bot_collect_scene s
+		LEFT JOIN bot_collect_domain d ON d.uuid = s.domain_uuid 
+	WHERE
+		s.is_deleted =0
+		and d.is_deleted =0
+	</select>
+	<select id="listTask" resultType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.TaskVO">
+	
+		SELECT
+			t.uuid 'task_id',
+			t.t_name 'task_name' 
+		FROM
+			bot_collect_task t 
+		WHERE
+			t.is_deleted = 0 
+			AND t.scene_uuid = #{dto.sceneId} 
+			<if test="dto.nameLike != null and dto.nameLike != ''">
+			AND t.t_name LIKE CONCAT( '%', #{dto.nameLike}, '%' )
+			</if>
+	</select>
+	
+	<select id="listInfo" resultType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.InfoVO">
+		SELECT
+			i.uuid 'info_id',
+			i.o_name 'info_name',
+			g.lng 'info_lng',
+			g.lat 'info_lat' 
+		FROM
+			bot_collect_info i
+			LEFT JOIN bot_collect_geography g ON g.is_deleted = 0 
+			AND g.busi_id = i.uuid 
+			AND g.busi_type = 'bot_collect_info' 
+		WHERE
+			i.is_deleted = 0 
+			AND i.domain_uuid = #{dto.domainId} 
+			<if test="dto.nameLike != null and dto.nameLike != ''">
+			AND i.o_name LIKE CONCAT( '%', #{dto.nameLike}, '%' )
+			</if>
+	</select>
+	
+	<select id="getStrategyDetail" resultMap="getStrategyDetailRsMap">
+	SELECT
+		s.uuid 'strategy_id',
+		s.strategy_name,
+		s.strategy_type,
+		s.strategy_value,
+		s.business_status,
+		s.strategy_plan 'strategy_plan_str',
+		s.strategy_desc,
+		s.work_count,
+		st.task_uuid,
+		st.collect_uuid,
+		sc.domain_uuid 'domain_id',
+		sc.uuid 'scene_id',
+		sc.s_name 'scene_name'
+	FROM
+		bot_collect_strategy s
+		LEFT JOIN bot_collect_strategy_task st ON st.is_deleted = 0 
+		AND st.strategy_uuid = s.uuid
+		left join bot_collect_task t on t.uuid=st.task_uuid
+		left join bot_collect_scene sc on t.scene_uuid= sc.uuid
+		where s.uuid=#{strategyId}
+	</select>
+	<select id="getStrategyList"
+			resultType="com.chinobot.aiuas.bot_collect.strategy.entity.vo.StrategyListVO">
+		SELECT
+		s.`uuid` as strategyId,
+		s.`strategy_name` AS strategyName,
+		s.`strategy_type` AS strategyType,
+		IFNULL(a.flightCount, 0) AS flightCount
+		FROM
+		`bot_collect_strategy` s
+		LEFT JOIN
+		(SELECT
+		f.`strategy_id`,
+		COUNT(f.`uuid`) AS flightCount
+		FROM
+		bot_prospect_flight f
+		WHERE f.`is_deleted` = '0'
+		GROUP BY f.`strategy_id`) a
+		ON a.strategy_id = s.`uuid`
+		WHERE s.`is_deleted` = '0'
+		<if test="name != null and name != ''">
+			AND s.`strategy_name` LIKE CONCAT('%',#{name},'%')
+		</if>
+	</select>
+	<select id="listStrategyOnline" resultType="com.chinobot.aiuas.bot_collect.strategy.entity.Strategy">
+	SELECT
+		DISTINCT s.* 
+	FROM
+		bot_collect_strategy s
+		LEFT JOIN bot_prospect_flight f ON f.strategy_id = s.uuid
+		where s.is_deleted=.0 and f.is_deleted=0 and s.business_status='1' and s.strategy_type != '4'
+	</select>
+    <select id="getInfoByFlightWorkId" resultType="java.util.Map">
+		SELECT
+		  s.uuid as strategyUuid,
+		  s.strategy_name AS strategyName,
+		  s.strategy_type AS strategyType,
+		  s.strategy_desc AS strategyDesc
+		FROM
+		  bot_prospect_flight_work fw
+		  LEFT JOIN bot_prospect_flight f
+			ON fw.flight_uuid = f.uuid
+		  LEFT JOIN bot_collect_strategy s
+			ON f.strategy_id = s.uuid
+		WHERE fw.is_deleted = '0'
+		  AND f.is_deleted = '0'
+		  AND s.is_deleted = '0'
+		  AND fw.uuid = #{flightWorkId}
+	</select>
+	<!-- 根据taskId，查询策略 -->
+	<select id="getStrategyInfoByTaskId" resultType="Map">
+		SELECT
+		  s.uuid,
+		  s.strategy_name,
+		  s.strategy_type,
+		  s.strategy_desc
+		FROM  bot_collect_strategy s
+		  left join bot_collect_strategy_task st on s.uuid = st.strategy_uuid 
+		  where s.is_deleted = '0' 
+		  <if test="p.taskUuid != null and p.taskUuid != ''">
+			AND st.task_uuid =  #{p.taskUuid}
+		</if>
+			group by s.uuid,s.strategy_name, s.strategy_type, s.strategy_desc
+	</select>
+	<select id="getSpecialStrategyDetail" resultMap="specialStrategyDetailRsMap">
+	SELECT
+		s.uuid strategy_id,
+		s.strategy_name,
+		s.strategy_type,
+		s.business_status,
+		s.strategy_desc,
+		GROUP_CONCAT( fw.uuid ) node_id,
+		f.uuid flight_id,
+		f.flignt_name flight_name,
+		fw.flight_date fly_date,
+		count( fw.uuid ) count 
+	FROM
+		bot_collect_strategy s
+		left JOIN
+        bot_prospect_flight f 
+            ON f.strategy_id = s.uuid AND f.is_deleted = 0 
+    	left JOIN
+        bot_prospect_flight_work fw 
+            ON fw.flight_uuid = f.uuid AND fw.is_deleted = 0 
+	WHERE
+		s.uuid = #{strategyId} 
+		and ((f.uuid is not null and fw.uuid is not null) or (f.uuid is null and fw.uuid is null))
+	GROUP BY
+		f.uuid,
+		f.flignt_name,
+		fw.flight_date 
+	ORDER BY
+		fly_date
+	</select>
+	<select id="listFlight" resultMap="listFlightRsMap">
+	SELECT
+		f.uuid flight_id,
+		f.flignt_name flight_name,
+		t.uuid t_id,
+		t.t_name,
+		i.uuid o_id,
+		i.o_name 
+	FROM
+		bot_prospect_flight f
+		JOIN bot_collect_flight_task ft ON ft.flight_uuid = f.uuid
+		JOIN bot_collect_task t ON t.uuid = ft.task_uuid 
+		AND t.is_deleted = 0
+		JOIN bot_collect_info i ON i.uuid = ft.collect_uuid 
+		AND i.is_deleted = 0 
+	WHERE
+		<if test="p.flightId != null and p.flightId != ''">
+	    f.uuid = #{p.flightId}
+	    </if>
+	    <if test="p.strategyId != null and p.strategyId != ''">
+		f.strategy_id = #{p.strategyId} 
+		</if>
+		AND f.is_deleted = 0 
+		AND ft.is_deleted =0
+	order by f.create_time desc
+	</select>
+</mapper>

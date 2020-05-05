@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.common.message.mapper.MessageConfigMapper">
+
+	<!-- 获取模板配置列表 -->
+	<select id="getMessageConfigList" resultType="com.chinobot.common.message.entity.vo.MessageConfigVo">
+	
+		SELECT
+			uuid,
+			`name` AS moduleName,
+			`code` AS moduleCode,
+			url,
+			template,
+			open_type AS openType
+		FROM
+			p_message_config
+		WHERE
+			data_status = '1'
+		<if test="p.moduleName != null and p.moduleName != ''">
+        	AND `name` like CONCAT('%',#{p.moduleName},'%')
+        </if>
+        <if test="p.moduleCode != null and p.moduleCode != ''">
+        	AND `code` like CONCAT('%',#{p.moduleCode},'%')
+        </if>
+		Order By operate_time desc
+	</select>
+
+	<!-- 获取模板消息配置 -->
+	<select id="getMessageConfig" resultType="com.chinobot.common.message.entity.vo.MessageConfigVo">
+		SELECT
+			uuid,
+			`name` AS moduleName,
+			`code` AS moduleCode,
+			url,
+			template,
+			open_type AS openType
+		FROM
+			p_message_config
+		WHERE
+			uuid = #{uuid}
+	</select>
+	
+	<!-- 获取消息列表 -->
+	<select id="getMessageList" resultType="com.chinobot.common.message.entity.vo.MessageListVO">
+		SELECT
+			mc.`name` AS moduleName,
+			(
+				SELECT
+					pname
+				FROM
+					cle_person
+				WHERE
+					uuid = m.send_pid
+			) AS sendName,
+			(
+				SELECT
+					pname
+				FROM
+					cle_person
+				WHERE
+					uuid = m.receive_pid
+			) AS receiveName,
+			m.content,
+			m.url,
+			m.create_time AS sendTime,
+			m.is_read AS isRead
+		FROM
+			p_message m
+		LEFT JOIN p_message_config mc ON m.`code` = mc.`code`
+		WHERE
+			m.data_status = '1'
+		AND mc.data_status = '1'
+		<if test="p.moduleName != null and p.moduleName != ''">
+        	AND mc.`name` like CONCAT('%',#{p.moduleName},'%')
+        </if>
+        <if test="p.start != null and p.start != ''">
+			AND DATE_FORMAT(m.create_time, '%Y-%m-%d') &gt;= #{p.start}
+		</if>
+		<if test="p.end != null and p.end != ''">
+			AND DATE_FORMAT(m.create_time, '%Y-%m-%d') &lt;= #{p.end}
+		</if>
+		<if test="p.sendPid != null and p.sendPid != ''">
+            AND m.send_pid = #{p.sendPid}
+        </if>
+        <if test="p.receivePid != null and p.receivePid != ''">
+            AND m.receive_pid = #{p.receivePid}
+        </if>
+        <if test="p.isRead != null and p.isRead != ''">
+            AND m.is_read = #{p.isRead}
+        </if>
+		Order By 
+			m.operate_time desc
+	</select>
+	
+	<!-- 获取发起人集合 -->
+	<select id="getSendByList" resultType="com.chinobot.aiuas.bot_event.urgent.entity.vo.PersonListVo">
+		SELECT
+			*
+		FROM
+			(
+				SELECT DISTINCT
+					send_pid AS id,
+					(
+						SELECT
+							pname
+						FROM
+							cle_person
+						WHERE
+							uuid = send_pid
+					) AS title
+				FROM
+					p_message
+				WHERE
+					data_status = '1'
+			) a
+		WHERE
+			a.title IS NOT NULL
+	</select>
+	
+	<!-- 获取接收人集合 -->
+	<select id="getRecevieList" resultType="com.chinobot.aiuas.bot_event.urgent.entity.vo.PersonListVo">
+		SELECT
+			*
+		FROM
+			(
+				SELECT DISTINCT
+					receive_pid AS id,
+					(
+						SELECT
+							pname
+						FROM
+							cle_person
+						WHERE
+							uuid = receive_pid
+					) AS title
+				FROM
+					p_message
+				WHERE
+					data_status = '1'
+			) a
+		WHERE
+			a.title IS NOT NULL
+	</select>
+	
+</mapper>

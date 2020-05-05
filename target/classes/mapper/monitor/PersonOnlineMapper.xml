@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.monitor.mapper.PersonOnlineMapper">
+
+	<!-- 在线人员列表 -->
+	<select id="getList" resultType="com.chinobot.plep.home.monitor.entity.PersonOnline">
+	
+		SELECT
+			uuid,
+			operate_time AS operateTime,
+			person_id AS personId,
+			latitude,
+			longitude
+		FROM
+			p_person_online
+		WHERE
+			online_status = '1'
+			
+	</select>
+	
+	<!-- 部门在线人员 -->
+	<select id="getPersonByDept" resultType="com.chinobot.plep.home.homepage.entity.vo.OnlinePersonVo">
+		
+		SELECT
+			p.person_id AS uuid,
+			p.latitude,
+			p.longitude,
+			p.online_status AS onlineStatus,
+			cp.pname,
+			cp.duties,
+			cp.open_id AS openId,
+			fb.file_id AS fileId,
+			(SELECT u.uuid FROM bot_resource_uav u WHERE u.person_uuid = p.person_id LIMIT 1) AS uavId,
+			(SELECT u.ename FROM bot_resource_uav u WHERE u.person_uuid = p.person_id LIMIT 1) AS uavName
+		FROM
+			p_person_online p
+		LEFT JOIN cle_person cp ON cp.uuid = p.person_id
+		LEFT JOIN cb_file_bus fb ON fb.bus_id = cp.uuid
+		AND fb.module = 'person_face'
+		AND fb.data_status = '1'
+		<!-- LEFT JOIN cle_dept d ON d.uuid = cp.dept_id
+		<if test="p.deptId != null and p.deptId != ''">
+		left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if> -->
+		WHERE
+			cp.pname IS NOT NULL
+		AND cp.duties IS NOT NULL
+		<!-- <if test="p.deptId != null and p.deptId != ''">
+           AND d.dept_code like CONCAT(d2.dept_code,'%')
+       	</if> -->
+       	<if test="p.name != null and p.name != ''">
+           AND cp.pname like CONCAT('%',#{p.name},'%')
+           
+       	</if>
+       	ORDER BY
+			p.online_status DESC,
+			p.operate_time DESC
+	</select>
+	
+	<!-- 获取部门下的无人机 -->
+	<select id="getUavByDept" resultType="com.chinobot.plep.home.homepage.entity.vo.HomePageUavVo">
+		SELECT
+			u.uuid,
+			u.ename,
+			u.ecode,
+			uo.run_status,
+			uo.longitude,
+			uo.latitude,
+			uo.flying_height,
+			uo.flight_speed
+			
+		FROM
+			cle_uav u
+		LEFT JOIN p_uav_online uo ON uo.uav_code = u.ecode
+		LEFT JOIN cle_dept d ON d.uuid = u.dept_id
+		<if test="p.deptId != null and p.deptId != ''">
+		left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if>
+		WHERE  
+			u.data_status = '1'
+		AND u.etype = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+			AND d.dept_code like CONCAT(d2.dept_code,'%')
+		</if>
+		<if test="p.name != null and p.name != ''">
+           AND u.ename like CONCAT('%',#{p.name},'%')
+           
+       	</if>
+			
+
+	</select>
+	
+	<!-- 人员在线信息 -->
+	<select id="getPersonDetail" resultType="com.chinobot.plep.home.homepage.entity.vo.OnlinePersonDetailVo">
+		SELECT
+			p.person_id AS uuid,
+			p.latitude,
+			p.longitude,
+			p.online_status AS onlineStatus,
+			cp.pname
+		FROM
+			p_person_online p
+		LEFT JOIN cle_person cp ON cp.uuid = p.person_id
+		WHERE
+			p.person_id = #{uuid}
+	</select>
+	
+	<!-- 无人机在线信息 -->
+	<select id="getUavOnlineDetail" resultType="com.chinobot.plep.home.homepage.entity.vo.OnlineUavDetailVo">
+		SELECT
+			u.uuid,
+			u.ename,
+			uo.run_status AS runStatus,
+			uo.longitude,
+			uo.latitude,
+			uo.flying_height AS flyingHeight,
+			uo.flight_speed AS flightSpeed
+		FROM
+			bot_resource_uav u
+		LEFT JOIN p_uav_online uo ON u.uuid = uo.uav_code
+		WHERE
+			u.uuid = #{uuid}
+	</select>
+	
+</mapper>

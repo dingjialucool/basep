@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.resource.mapper.HolidayMapper">
+
+<select id="listHoliday" resultType="com.chinobot.aiuas.bot_collect.resource.entity.Holiday">
+SELECT
+	* 
+FROM
+	bot_resource_holiday h 
+WHERE
+	h.is_deleted = 0 
+	AND (
+	h.holiday = #{holiday}
+	OR h.holiday like CONCAT(#{holiday},',','%') 
+	OR h.holiday like CONCAT('%',',', #{holiday},',','%') 
+	OR h.holiday like CONCAT('%', ',', #{holiday}) 
+	)
+	<!-- AND to_days( h.holiday_date ) >= to_days( now( ) )  -->
+ORDER BY
+	h.holiday_date ASC 
+</select>
+
+<select id="listHolidayByMonth" resultType="com.chinobot.aiuas.bot_collect.resource.entity.vo.HolidayVo">
+SELECT
+	rh.uuid,
+	rh.holiday_date,
+	rh.holiday,
+	rh.work_vacation,
+	GROUP_CONCAT(b1.fieldname) holiday_name,
+	b2.fieldname work_vacation_name
+FROM
+	bot_resource_holiday rh 
+	left join cb_basedata b1 on b1.data_status='1' and b1.typecode='bot_collect_strategy_festival' and (
+	b1.fieldcode=rh.holiday
+	OR rh.holiday like CONCAT(b1.fieldcode,',','%') 
+	OR rh.holiday like CONCAT('%',',', b1.fieldcode,',','%') 
+	OR rh.holiday like CONCAT('%', ',', b1.fieldcode) 
+	)
+	left join cb_basedata b2 on b2.data_status='1' and b2.typecode='bot_system_work_vacation' and b2.fieldcode=rh.work_vacation
+WHERE
+	rh.is_deleted = 0 
+	AND (
+	DATE_FORMAT( rh.holiday_date, '%Y-%m' ) = #{month} 
+	OR DATE_FORMAT( date_add( rh.holiday_date, INTERVAL 15 DAY ), '%Y-%m' ) = #{month} 
+	OR DATE_FORMAT( date_add( rh.holiday_date, INTERVAL - 15 DAY ), '%Y-%m' ) = #{month} 
+	) 
+	group by rh.uuid,
+	rh.holiday_date,
+	rh.holiday,
+	rh.work_vacation,
+	b2.fieldname 
+	
+ORDER BY
+	rh.holiday_date
+</select>
+
+	<!-- 查出数据表中的已存在的当年及以后所有周末 -->
+	<select id="getWeekendYear" resultType="string">
+		SELECT
+			holiday_date
+		FROM
+			bot_resource_holiday
+		WHERE
+			is_deleted = '0'
+		AND date_format(holiday_date,'%Y')  &gt;= #{year}
+	
+	</select>
+</mapper>

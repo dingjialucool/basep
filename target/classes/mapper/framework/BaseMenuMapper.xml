@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.framework.web.mapper.BaseMenuMapper">
+	<select id="searchMenuByPersonId" resultType="com.chinobot.framework.web.entity.BaseMenu">
+      SELECT
+      DISTINCT  m.uuid, m.title_value as titleValue, 
+        m.key_value as keyValue, m.icon_value as iconValue, m.path_value as pathValue,
+        m.order_by as orderBy, m.data_status, 
+        m.create_by, m.create_time, m.menu_type,
+        m.operate_by, m.operate_time
+        from  cle_user_role r 
+        left join cle_menu_role mr on r.role_id = mr.role_id  
+        left join cle_menu m on mr.menu_id = m.uuid 
+        where m.data_status='1' AND mr.data_status = '1'  AND (m.parent_id is NULL OR m.parent_id = '')
+		AND r.data_status = '1' and  r.person_id = #{personId} order by m.order_by asc
+        </select>
+      <select id="searchMenuByPersonIdAndSystem" resultType="com.chinobot.framework.web.entity.BaseMenu">
+      SELECT
+      DISTINCT  m.uuid, m.title_value as titleValue, 
+        m.key_value as keyValue, m.icon_value as iconValue, m.path_value as pathValue,
+        m.order_by as orderBy, m.data_status, 
+        m.create_by, m.create_time, m.menu_type,
+        m.operate_by, m.operate_time
+        from  cle_user_role r 
+        left join cle_menu_role mr on r.role_id = mr.role_id  
+        left join cle_menu m on mr.menu_id = m.uuid 
+        where m.data_status='1' AND mr.data_status = '1'  AND m.parent_id = #{systemId}
+		AND r.data_status = '1' and  r.person_id = #{personId} order by m.order_by asc
+        </select>
+</mapper>

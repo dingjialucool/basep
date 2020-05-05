@@ -1,0 +1,413 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.ddjk.mapper.EquipmentOnlineInfoMapper">
+    <insert id="insertUavDispatch">
+        INSERT INTO cle_equipment_person_dispatch
+        SELECT now(), t1.uuid, t2.person_id,REPLACE(UUID(),"-",""),'1','','','','',''
+        FROM cle_uav t1
+        LEFT JOIN cle_equipment_person_dispatch t2 ON t2.equipment_id = t1.uuid AND t2.create_time=(
+        SELECT MAX(tt.create_time)
+        FROM cle_equipment_person_dispatch tt
+        WHERE tt.equipment_id=t1.uuid
+        )
+
+
+    </insert>
+
+    <select id="getTaskList" resultType="java.util.Map">
+        SELECT t1.uuid task_id,t2.uuid scene_id,t3.uuid grid_id, t1.task_code,
+        t1.task_status, t2.stype, t2.bus_type, t2.sname,t2.address,t3.gname, DATE_FORMAT(t1.create_time,'%Y-%m-%d %T') create_time, DATE_FORMAT(t1.xc_time,'%Y-%m-%d') xc_time,
+        t2.imp
+        FROM cle_task_xc t1
+        LEFT JOIN cle_scene t2 ON t2.uuid=t1.ref_slience
+        LEFT JOIN cle_grid t3 ON t2.grid_id=t3.uuid
+
+        WHERE t1.data_status='1'
+        <if test="param.viewName != null and param.viewName !=''">
+        and t2.sname like CONCAT(CONCAT('%',#{param.viewName}),'%')
+        </if>
+        <if test="param.task_status != null and param.task_status !=''">
+        			and t1.task_status in 
+        			<foreach collection="param.task_status" item="type" index="index"  
+			            open="(" close=")" separator=",">  
+			            #{type}  
+		        	</foreach> 
+        </if>
+        <if test="param.sceneType != null and param.sceneType !=''">
+            		and t2.stype in 
+           		    <foreach collection="param.sceneType" item="type" index="index"  
+			            open="(" close=")" separator=",">  
+			            #{type}  
+		        	</foreach> 
+        </if>
+        <if test="param.busType != null and param.busType !=''">
+            and t2.bus_type = #{param.busType}
+        </if>
+        <if test="param.start != null and param.start !=''">
+            and t1.create_time &gt;= #{param.start}
+        </if>
+        <if test="param.end != null and param.end !=''">
+            and t1.create_time &lt;= #{param.end}
+        </if>
+        <if test="param.start2 != null and param.start2 !=''">
+            and t1.xc_time &gt;= #{param.start2}
+        </if>
+        <if test="param.end2 != null and param.end2 !=''">
+            and t1.xc_time &lt;= #{param.end2}
+        </if>
+        <if test="param.prop != null and param.prop !=''">
+        order by ${param.prop} ${param.order}
+        </if>
+    </select>
+    <select id="getUavList" resultType="java.util.Map">
+        SELECT t1.uuid uav_id,t2.uuid dispatch_id,t1.ename name,t1.ecode code,t1.running_time,t1.temperature, GROUP_CONCAT(t3.pname SEPARATOR ',') persons
+        FROM cle_uav t1
+        LEFT JOIN cle_equipment_person_dispatch t2 ON t2.equipment_id = t1.uuid
+        LEFT JOIN cle_person t3 ON t3.uuid=t2.person_id
+        WHERE t1.data_status='1'
+        <if test="param.date != null and param.date !=''">
+        AND DATE_FORMAT(t2.create_time,'%Y-%m-%d')= #{param.date}
+        </if>
+        <if test="param.name != null and param.name !=''">
+        AND t1.ename LIKE CONCAT(CONCAT('%',#{param.name}),'%')
+        </if>
+        <if test="param.code != null and param.code !=''">
+        AND t1.ecode LIKE CONCAT(CONCAT('%',#{param.code}),'%')
+        </if>
+        GROUP BY t1.uuid,t2.uuid,t1.ename,t1.ecode,t1.running_time,t1.temperature
+
+    </select>
+    <select id="getUavListForTask" resultType="java.util.Map">
+         SELECT
+        t1.uuid,
+        t1.ename,
+        t1.ecode,
+        t1.running_time,
+        t1.temperature,
+        t1.running_time-IFNULL(SUM(t2.duration),
+        0) use_left,
+        IFNULL(SUM(t2.duration),0) use_all,
+        GROUP_CONCAT(t2.task_id SEPARATOR ',') task_ids,
+        count(t3.uuid) task_count,
+        IFNULL(ROUND(SUM(t2.duration) / t1.running_time * 100,1),0) percent
+    FROM
+        cle_uav t1
+    LEFT JOIN
+        cle_task_equipment_dispatch t2
+            ON t2.equipment_id=t1.uuid
+    LEFT JOIN
+        cle_task_xc t3
+            on t3.uuid=t2.task_id
+            and t3.task_status in(
+                '2',
+            '3')
+        WHERE
+            t1.data_status='1'
+            and t1.etype='1'
+        <if test="param.uids != null">
+            and t1.uuid in
+            <foreach collection="param.uids" item="id" index="index" open="(" close=")" separator=",">#{id}</foreach>
+
+        </if>
+        GROUP BY
+            t1.uuid,
+            t1.ename,
+            t1.ecode,
+            t1.running_time,
+            t1.temperature
+        <if test="param.uids != null">
+            union all
+            SELECT
+                    t1.uuid,
+                    t1.ename,
+                    t1.ecode,
+                    t1.running_time,
+                    t1.temperature,
+                    t1.running_time-IFNULL(SUM(t2.duration),
+                    0) use_left,
+            IFNULL(SUM(t2.duration),0) use_all,
+                    GROUP_CONCAT(t2.task_id SEPARATOR ',') task_ids,
+                    count(t3.uuid) task_count,
+                    IFNULL(ROUND(SUM(t2.duration) / t1.running_time * 100,1),0) percent
+                FROM
+                    cle_uav t1
+                LEFT JOIN
+                    cle_task_equipment_dispatch t2
+                        ON t2.equipment_id=t1.uuid
+                LEFT JOIN
+                    cle_task_xc t3
+                        on t3.uuid=t2.task_id
+                        and t3.task_status in(
+                            '2',
+                        '3')
+                    WHERE
+                        t1.data_status='1'
+                        and t1.etype='1'
+            and t1.uuid not in
+            <foreach collection="param.uids" item="id" index="index" open="(" close=")" separator=",">#{id}</foreach>
+
+                        GROUP BY
+                        t1.uuid,
+                        t1.ename,
+                        t1.ecode,
+                        t1.running_time,
+                        t1.temperature
+        </if>
+    </select>
+    <select id="getUavIdtList" resultType="java.lang.String">
+
+       select t1.equipment_id from cle_task_equipment_dispatch t1
+left join cle_uav t2 on t2.uuid=t1.equipment_id
+ where t1.data_status='1' and t2.uuid is not null and t1.task_id=#{param.task_id}
+    </select>
+    <select id="getSceneListForMonitor" resultType="java.util.Map">
+        select distinct s.uuid,
+        s.grid_id,
+        s.ab_id,
+        s.stype,
+        s.bus_type,
+        s.sname,
+        s.address,
+        s.imp,
+        ab.center,
+        GROUP_CONCAT(DISTINCT tx.uuid SEPARATOR ',') AS task_ids,
+        IF(locate('0',GROUP_CONCAT(DISTINCT IF(tx.task_status='4','1','0') SEPARATOR ',') )> 0,'0','1') AS is_success
+        from cle_scene s
+        left join cle_task_xc tx on tx.ref_slience=s.uuid and tx.task_status in (2,3,4,6)
+        LEFT JOIN
+        cle_address_base ab
+        on s.ab_id = ab.uuid
+        WHERE
+        tx.data_status='1'
+        AND s.data_status='1'
+        AND DATE_FORMAT(tx.xc_time,'%Y-%m-%d')=DATE_FORMAT(now(),'%Y-%m-%d')
+        <if test="param.key != null and param.key !=''">
+            AND s.sname LIKE CONCAT(CONCAT('%',#{param.key}),'%')
+        </if>
+        GROUP BY
+        s.uuid,
+        s.grid_id,
+        s.ab_id,
+        s.stype,
+        s.bus_type,
+        s.sname,
+        s.address,
+        s.imp,
+        ab.center
+        <if test="param.is_success != null and param.is_success !=''">
+            having IF(locate('0',GROUP_CONCAT(DISTINCT IF(tx.task_status='4','1','0') SEPARATOR ',') )> 0,'0','1')=#{param.is_success}
+        </if>
+    </select>
+    <select id="getUavListForMonitor" resultType="java.util.Map">
+        select u.uuid,u.ename,u.ecode,u.running_time,u.temperature,u.run_status,
+        ifnull(rf.latitude,rt.latitude) latitude, ifnull(rf.altitude,rt.altitude) altitude, ifnull(rf.longitude,rt.longitude) longitude,
+        ifnull(rf.dump_energy,rt.dump_energy) dump_energy, rf.location_type,rf.flight_speed,
+        rf.flying_height,rf.flight_orientation,rf.camera_angle
+        from cle_uav u
+        left join cle_robot_trail rt on u.ecode=rt.robot_no and rt.operate_time=(
+        SELECT MAX(tt.operate_time)
+        FROM cle_robot_trail tt
+        WHERE tt.robot_no=u.ecode
+        ) and u.run_status='0'
+        left join cle_robot_flight rf on u.ecode=rf.robot_no and rf.operate_time=(
+        SELECT MAX(t.operate_time)
+        FROM cle_robot_flight t
+        WHERE t.robot_no=u.ecode
+        ) and u.run_status='1'
+        where u.data_status='1'
+        and u.etype='1'
+        <if test="param.run_status != null and param.run_status !=''">
+          and u.run_status=#{param.run_status}
+        </if>
+        <if test="param.key != null and param.key !=''">
+        and (u.ename like CONCAT(CONCAT('%',#{param.key}),'%') or u.ecode like CONCAT(CONCAT('%',#{param.key}),'%'))
+        </if>
+        order by u.ecode
+    </select>
+    <select id="getTaskListForEquipment" resultType="java.util.Map">
+        select t.uuid task_id,t.task_code,t.xc_time,t.create_time,s.uuid s_id,s.grid_id,s.stype,s.bus_type,
+        s.sname,s.address from cle_task_equipment_dispatch te
+        left join cle_task_xc t on te.task_id=t.uuid
+        left join cle_scene s on t.ref_slience = s.uuid
+        where te.data_status='1' and t.data_status='1'
+        <if test="param.xc_time != null">
+            AND
+            DATE_FORMAT(t.xc_time,'%Y-%m-%d')=DATE_FORMAT(#{param.xc_time},'%Y-%m-%d')
+        </if>
+        <if test="param.e_id != null and param.e_id !=''">
+        and  te.equipment_id=#{param.e_id}
+        </if>
+    </select>
+    <select id="getWarningListForMonitor" resultType="java.util.Map">
+        SELECT rgd.*
+        FROM cle_robot_gather_data rgd
+        WHERE
+        DATE_FORMAT(rgd.operate_time,'%Y-%m-%d')= DATE_FORMAT(now(),'%Y-%m-%d') and rgd.is_warning='1'
+        <if test="param.scene_id != null and param.scene_id !=''">
+            and rgd.scene_uuid=#{param.scene_id}
+        </if>
+        <if test="param.task_id != null and param.task_id !=''">
+            and rgd.task_uuid=#{param.task_id}
+        </if>
+        order by rgd.operate_time
+    </select>
+
+    <select id="getTaskCountByForMonitor" resultType="java.lang.Integer">
+        select count(*) from cle_task_xc tx where tx.data_status='1'
+and DATE_FORMAT(tx.xc_time,'%Y-%m-%d')=DATE_FORMAT(now(),'%Y-%m-%d')
+        <if test="param.status_list!=null">
+            and tx.task_status in
+            <foreach collection="param.status_list" item="item" index="index" open="(" separator="," close=")">
+
+            #{item}
+        </foreach>
+
+        </if>
+    </select>
+    <select id="getTaskUser" resultType="java.util.Map">
+        select distinct us.* from cle_equipment_person_dispatch epd
+        left join cle_uav u on epd.equipment_id=u.uuid
+        left join cle_person us on epd.person_id = us.uuid
+        left join cle_task_equipment_dispatch ted on ted.equipment_id=u.uuid
+        where epd.data_status='1' and u.data_status='1'
+        and us.data_status='1' and ted.data_status='1'
+        and ted.task_id=#{task_id}
+
+    </select>
+    <select id="getEquipmentPerson" resultType="java.util.Map">
+
+        select distinct u.* from cle_equipment_person_dispatch epd left join cle_person u on u.uuid=epd.person_id
+ where epd.data_status='1' and u.data_status='1' and epd.equipment_id=#{e_id}
+
+    </select>
+    <select id="getUavRoad" resultType="java.lang.String">
+        select concat(rt.longitude,',',rt.latitude) from cle_robot_trail rt where rt.robot_no=#{param.code}
+        <if test="param.time!=null">
+AND DATE_FORMAT(rt.operate_time,'%Y-%m-%d')= DATE_FORMAT(#{param.time},'%Y-%m-%d')
+        </if>
+        order by rt.operate_time asc
+    </select>
+    <select id="getTaskPoints" resultType="java.util.Map">
+        SELECT st.tname,st.content,st.tindex,st.tvalue,d.dname,d.uuid did,st.level,rbd.rounds_uuid,rbd.trail_type,
+GROUP_CONCAT(DISTINCT rbd.data_file_uuid SEPARATOR ',') fileid,
+GROUP_CONCAT(DISTINCT rbd.text_content SEPARATOR '##') words,
+GROUP_CONCAT(DISTINCT rbd.is_warning SEPARATOR ',') is_warning,
+GROUP_CONCAT(DISTINCT rbd.warn_content SEPARATOR '##') warn_content
+FROM cle_robot_gather_data rbd
+LEFT JOIN cle_scene_task st ON rbd.rounds_uuid=st.uuid
+LEFT JOIN cle_dept d ON st.dept_id=d.uuid
+where rbd.task_uuid=#{uuid}
+GROUP BY st.tname,st.content,st.tindex,st.tvalue,d.dname,d.uuid,st.level,rbd.rounds_uuid,rbd.trail_type
+    </select>
+    <select id="getTaskRoad" resultType="java.lang.String">
+
+        select concat(rf.longitude,',',rf.latitude) from cle_robot_flight rf where rf.task_uuid=#{param.code} order by rf.operate_time asc
+
+
+    </select>
+    
+    <select id="getUavTaskFinishPercent" resultType="map">
+		SELECT
+		  a.uuid,
+		  a.ename,
+		  a.ecode,
+		  a.runningTime,
+		  a.runStatus,
+		  a.dataStatus,
+		  a.dumpEnergy,
+          a.longitude,
+          a.latitude,
+		  SUM(a.finish) AS 'finish',
+		  IFNULL(
+		    SUM(a.finish) / (SUM(a.finish) + SUM(a.nofinish)),
+		    0
+		  ) AS 'finishPercent',
+		  SUM(a.nofinish) AS 'nofinish',
+		  IFNULL(
+		    SUM(a.nofinish) / (SUM(a.finish) + SUM(a.nofinish)),
+		    0
+		  ) AS 'nofinishPercent'
+		FROM
+		  (SELECT
+		    u.uuid,
+		    u.ename,
+		    u.ecode,
+		    u.running_time AS runningTime,
+		    u.run_status AS runStatus,
+		    u.data_status AS dataStatus,
+		    IFNULL(rt3.dump_energy, 0) AS dumpEnergy,
+			rt3.longitude,
+			rt3.latitude,
+		    CASE
+		      WHEN tx.task_status = '4'
+		      THEN 1
+		      ELSE 0
+		    END AS 'finish',
+		    CASE
+		      WHEN tx.task_status IN ('1', '2', '3')
+		      THEN 1
+		      ELSE 0
+		    END AS 'nofinish'
+		  FROM
+		    cle_uav u
+		    LEFT JOIN cle_task_equipment_dispatch ted
+		      ON u.uuid = ted.equipment_id
+		      AND ted.data_status = '1'
+		    LEFT JOIN cle_task_xc tx
+		      ON ted.task_id = tx.uuid
+		      AND tx.data_status = '1'
+		    LEFT JOIN (SELECT
+					        r.*,
+					        rt2.longitude,
+					        rt2.latitude,
+					        rt2.dump_energy
+					      FROM
+					        (SELECT
+					          rt.robot_no,
+					          MAX(rt.operate_time) AS operate_time
+					        FROM
+					          cle_robot_trail rt
+					        GROUP BY rt.robot_no) r
+					        LEFT JOIN cle_robot_trail rt2
+					          ON r.robot_no = rt2.robot_no
+					          AND r.operate_time = rt2.operate_time
+				          <if test="p.xcTime != null and p.xcTime != ''">
+				            WHERE DATE_FORMAT(rt2.operate_time, '%Y-%m-%d') = #{p.xcTime}
+				          </if>
+					          ) rt3
+		      ON u.ecode = rt3.robot_no
+	      WHERE tx.task_status IN ('2', '3', '4', '6')
+	      <if test="p.xcTime != null and p.xcTime != ''">
+		    AND tx.xc_time = #{p.xcTime}
+	      </if>
+	      <if test="p.taskId != null and p.taskId != ''">
+            AND u.uuid = (SELECT
+						      u2.uuid
+						    FROM
+						      cle_uav u2
+						      LEFT JOIN cle_task_equipment_dispatch ted2
+						        ON u2.uuid = ted2.equipment_id
+						    WHERE ted2.task_id = #{p.taskId})
+	      </if>
+		      ) a
+        WHERE 1 = 1
+        <if test="p.ecode != null and p.ecode != ''">
+          AND a.ecode = #{p.ecode}
+        </if>
+		GROUP BY a.uuid,
+		  a.ename,
+		  a.runningTime,
+		  a.runStatus,
+		  a.dataStatus,
+		  a.dumpEnergy,
+		  a.longitude,
+		  a.latitude
+		ORDER BY a.uuid
+    </select>
+    <select id="getSceneShape" resultType="java.util.Map">
+        SELECT s.sname,s.floor,ab.polyline
+FROM cle_scene s
+LEFT JOIN cle_address_base ab ON ab.uuid=s.ab_id
+WHERE s.data_status='1' AND ab.polyline IS NOT NULL
+    </select>
+</mapper>

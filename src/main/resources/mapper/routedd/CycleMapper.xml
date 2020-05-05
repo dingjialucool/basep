@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.routedd.mapper.CycleMapper">
+
+	<select id="getCycles" resultType="com.chinobot.plep.home.routedd.entity.vo.CyclesVo">
+		SELECT
+			
+			c.time_start AS timeStart,
+			c.time_end AS timeEnd,
+			c.cycle,
+			c.cycle_unit AS cycleUnit,
+			c.cycle_name AS planName,
+			c.use_status AS useStatus,
+			c.operate_time AS operateTime,
+			pe.pname AS operateName
+		FROM
+			p_cycle c
+		LEFT JOIN cle_person pe ON pe.uuid = c.operate_by
+		LEFT JOIN cle_dept d ON d.uuid = c.dept_id
+		<if test="dto.deptId != null and dto.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{dto.deptId}
+		</if>
+		WHERE
+			c.data_status = '1'
+			<if test="dto.deptId != null and dto.deptId != ''">
+	          AND d.dept_code like CONCAT(d2.dept_code,'%')
+	        </if>
+	        <if test="dto.planName != null and dto.planName != ''">
+	          AND ud.route_name like CONCAT('%',#{dto.planName},'%')
+	        </if>
+			<if test="dto.split != null and dto.split !=''">
+			  AND c.use_status in
+			<foreach collection="dto.split" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+	</select>
+	
+	<select id="getCycle" resultType="com.chinobot.plep.home.routedd.entity.vo.CyclesVo">
+		SELECT
+			c.time_start AS timeStart,
+			c.time_end AS timeEnd,
+			c.cycle,
+			c.cycle_unit AS cycleUnit,
+			c.use_status AS useStatus
+		FROM
+			p_cycle c
+			LEFT JOIN p_cycle_detail cd ON cd.cycle_id = c.uuid
+		WHERE 1 = 1
+			and c.uuid = #{uuid}
+	
+	</select>
+	
+	<select id="getCyclePlans" resultType="com.chinobot.plep.home.routedd.entity.dto.CycleLeDto">
+	
+		SELECT
+			p.uuid,
+			p.time_start AS timeStart,
+			p.last,
+			cd.uav_dsp_id AS uavDspId,
+			p.time_end AS timeEnd,
+			p.cycle,
+			p.cycle_unit AS cycleUnit,
+			p.early_day AS earlyDay,
+			ud.time AS flyTime
+		FROM
+			p_cycle p
+		LEFT JOIN p_cycle_detail cd ON cd.cycle_id = p.uuid
+		LEFT JOIN p_uav_dispatch ud ON cd.uav_dsp_id = ud.uuid
+		WHERE
+			p.data_status = '1'
+		AND cd.data_status = '1'
+		AND p.use_status = '1'
+		ORDER BY
+			ud.time ASC
+	</select>
+</mapper>

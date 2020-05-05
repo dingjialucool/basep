@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.plan.mapper.RangeMapper">
+
+	<resultMap type="com.chinobot.cityle.base.entity.vo.VoAddressBase" id="voAddressBaseResultMap">
+        <association property="entity" javaType="map">
+            <id column="uuid" property="uuid"/>
+            <result column="ab_id" property="abId"/>
+            <result column="name" property="name"/>
+            <result column="data_status" property="dataStatus"/>
+            <result column="fileId" property="fileId"/>
+            <result column="path" property="path"/>
+            <result column="sceneCount" property="sceneCount"/>
+            <result column="deptCount" property="deptCount"/>
+            <result column="operate_time" property="operateTime"/>
+            <result column="isPath" property="isPath"/>
+            <result column="assign_id" property="assignId"/>
+            <result column="describes" property="describes"/>
+        </association>
+        <association property="addressBase" resultMap="com.chinobot.framework.web.mapper.IBaseMapper.addressBaseResultMap">
+        </association>
+    </resultMap>
+    <select id="getRangeAddr" resultMap="voAddressBaseResultMap">
+    	SELECT
+		  if( ff.rangId!='',true,false) as isPath,
+          g.*,
+          f.fileId,
+          f.path,
+          dc.deptCount,
+          sc.sceneCount,
+          ab.uuid AS ab_uuid,
+          ab.atype AS ab_atype,
+          ab.province AS ab_province,
+					
+          (SELECT `name`
+             FROM cb_regions
+            WHERE `code` = ab.province) AS ab_province_name,
+          ab.city AS ab_city,
+          (SELECT `name`
+             FROM cb_regions
+            WHERE `code` = ab.city) AS ab_city_name,
+          ab.district AS ab_district,
+          (SELECT `name`
+             FROM cb_regions
+            WHERE `code` = ab.district) AS ab_district_name,
+          ab.street AS ab_street,
+          (SELECT `name`
+             FROM cb_regions
+            WHERE `code` = ab.street) AS ab_street_name,
+          ab.address AS ab_address,
+          ab.center AS ab_center,
+          ab.polyline AS ab_polyline,
+          ab.data_status AS ab_data_status
+        FROM
+          p_range g
+          LEFT JOIN cle_address_base ab
+            ON g.ab_id = ab.uuid
+            AND ab.data_status = '1'
+            left join p_range_dept rd
+					on rd.range_id=g.uuid
+          LEFT JOIN
+		    (SELECT
+		      uf.uuid AS fileId,
+		      uf.path,
+		      fb.bus_id
+		    FROM
+		      cb_upload_file uf
+		      LEFT JOIN cb_file_bus fb
+		        ON uf.uuid = fb.file_id
+		    WHERE fb.sort = '1'
+		      AND fb.module = 'range_album') f
+            ON f.bus_id = g.uuid
+		  LEFT JOIN
+		    (SELECT
+		      rang_id,
+		      COUNT(1) AS sceneCount
+		    FROM
+		      p_fly_area
+				where data_status='1'
+		    GROUP BY rang_id) sc
+		    ON sc.rang_id = g.uuid
+		  LEFT JOIN
+		    (SELECT
+		      range_id,
+		      COUNT(1) AS deptCount
+		    FROM
+		      p_range_dept
+					where data_status='1'
+		    GROUP BY range_id) dc
+		    ON dc.range_id = g.uuid
+			left JOIN
+			(
+				SELECT
+					ra.uuid AS rangId
+				FROM
+					p_range ra
+				LEFT JOIN p_fly_area fa ON ra.uuid = fa.rang_id
+				LEFT JOIN p_fly_path fp ON fp.area_id = fa.uuid
+				WHERE
+					fp.uuid IS NOT NULL
+					GROUP BY ra.uuid
+				) ff 
+				on ff.rangId = g.uuid
+			left join cle_dept d on d.uuid=rd.dept_id and d.data_status='1'
+			<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			</if>
+          WHERE 1 = 1
+          AND g.data_status = '1'
+          <if test="p.deptId != null and p.deptId != ''">
+          AND d.dept_code like CONCAT(d2.dept_code,'%')
+          </if>
+         <if test="p.uuid != null and p.uuid != ''">
+          AND g.uuid = #{p.uuid}
+         </if>
+         <if test="p.gname != null and p.gname != ''">
+          AND g.name like CONCAT('%', #{p.gname}, '%')
+         </if>
+         ORDER BY g.operate_time desc
+    </select>
+</mapper>

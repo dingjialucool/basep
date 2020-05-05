@@ -1,0 +1,28 @@
+template header
+
+ruleCode
+groupName
+ruleCondition
+priority
+
+package com.chinobot.droolsdrt.engineer;
+import java.util.Map;
+
+
+
+template "judge condition"
+
+rule "judge_@{ruleCode}"
+salience @{priority}
+activation-group "@{groupName}"
+agenda-group "@{groupName}"
+
+when
+   $map:Map(@{ruleCondition})
+then
+   $map.put("droolsFilter", true);
+   $map.put("ruleId", '@{ruleCode}');
+   System.out.println("符合条件ID：@{ruleCode}" );
+end
+
+end template

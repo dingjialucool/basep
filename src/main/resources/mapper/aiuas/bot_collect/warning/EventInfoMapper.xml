@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.warning.mapper.EventInfoMapper">
+	
+	<!-- 下拉飞行员 -->
+	<select id="getFlyPerson" resultType="map">
+		SELECT
+			uuid AS id,
+			pname AS title
+		FROM
+			cle_person
+		WHERE
+			data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+            AND dept_id = #{p.deptId}
+        </if>
+	</select>
+	
+	<!-- 下拉无人机 -->
+	<select id="getUav" resultType="map">
+		SELECT
+			uuid AS id,
+			ename AS title
+		FROM
+			bot_resource_uav
+		WHERE
+			is_deleted = '0'
+		
+	</select>
+	
+	<!-- 治理历史记录 -->
+	<select id="getFeedBackRecord" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.FeedBackHistoryVo">
+		SELECT
+			create_time AS feedbackTime,
+			host_idea AS feedbackContent
+		FROM
+			bot_event_flow
+		WHERE
+			business_status = '30' AND event_uuid = #{uuid}
+		ORDER BY create_time DESC
+	</select>
+	
+	<!-- 线索分拨列表查询 -->
+	<select id="getClueList"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.EventInfoListVo">
+        SELECT
+			ei.uuid,
+			w.uuid AS warnId,
+			ei.business_status AS businessStatus,
+			ei.event_name AS eventName,
+			w.warning_time AS warningTime,
+			w.warning_name AS warningName,
+			w.address AS address,
+			i.o_name AS objectName,
+			ei.event_level AS eventLevel,
+			f.flignt_name AS fligntName,
+			(
+				SELECT DISTINCT
+					cb.file_id
+				FROM
+					cb_file_bus cb
+				WHERE
+					cb.bus_id = ei.uuid
+				AND cb.data_status = '1'
+				AND cb.module = 'yjmodule_img'
+			) AS fileId,
+			u.ename,
+			IFNULL(pe1.dept_id, ei.host_unit) AS ffDeptId,
+			IFNULL(pe2.dept_id, ei.host_unit_rescue) AS jyDeptId
+		FROM
+			bot_event_info ei
+		LEFT JOIN bot_event_warning_info wi ON wi.event_uuid = ei.uuid
+		LEFT JOIN bot_event_warning w ON wi.warning_uuid = w.uuid
+		LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+		LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+		LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+		LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+		LEFT JOIN cle_person pe1 ON pe1.uuid = ei.host_by
+		LEFT JOIN cle_person pe2 ON pe2.uuid = ei.host_by_rescue
+		WHERE
+			ei.is_deleted = '0'
+		AND ei.business_status = '10'
+		AND ei.event_type = '2'
+		AND( 
+			(ei.host_unit = #{p.deptId} AND ei.business_status = '10')
+			OR
+			(ei.host_unit_rescue = #{p.deptId} AND ei.business_status = '10')
+			OR
+			(ei.host_by = #{p.personId} AND ei.business_status = '10')
+			OR
+			(ei.host_by_rescue = #{p.personId} AND ei.business_status = '10')
+		   )
+            <if test="p.start != null and p.start != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &gt;= #{p.start}
+			</if>
+			<if test="p.end != null and p.end != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &lt;= #{p.end}
+			</if>
+            <if test="p.warningName != null and p.warningName != ''">
+            	AND w.warning_name like CONCAT('%',#{p.warningName},'%')
+            </if>
+            <if test="p.address != null and p.address != ''">
+            	AND w.address like CONCAT('%',#{p.address},'%')
+            </if>
+            <if test="p.eventName != null and p.eventName != ''">
+            	AND ei.event_name like CONCAT('%',#{p.eventName},'%')
+            </if>
+            <if test="p.objectName != null and p.objectName != ''">
+            	AND i.o_name like CONCAT('%',#{p.objectName},'%') 
+            </if>
+            <if test="p.flightName != null and p.flightName != ''">
+            	AND f.flignt_name like CONCAT('%',#{p.flightName},'%') 
+            </if>
+            order by w.warning_time DESC
+   </select>
+   
+   <!--  查询及获取历史事件及线索List列表 -->
+	<select id="getHistoryEventAndClueList"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.EventInfoTypeListVo">
+       		SELECT
+				ei.uuid,
+				w.uuid AS warnId,
+				ei.business_status AS businessStatus,
+				ei.event_name AS eventName,
+				w.warning_time AS warningTime,
+				w.warning_name AS warningName,
+				w.address AS address,
+				u.ename,
+				ei.event_level AS eventLevel,
+				i.o_name AS objectName,
+				f.flignt_name AS fligntName,
+				(
+					SELECT DISTINCT
+						cb.file_id
+					FROM
+						cb_file_bus cb
+					WHERE
+						cb.bus_id = ei.uuid
+					AND cb.data_status = '1'
+					AND cb.module = 'yjmodule_img'
+				) AS fileId
+			FROM
+				bot_event_info ei
+			LEFT JOIN bot_event_warning_info wi ON wi.event_uuid = ei.uuid
+			LEFT JOIN bot_event_warning w ON wi.warning_uuid = w.uuid
+			LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+			LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+			LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+			LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+			WHERE
+				ei.is_deleted = '0' AND (ei.host_by is not null or ei.host_unit is not NULL)
+			AND ei.business_status IN ('88', '90', '99')
+			AND ei.event_type = '1'
+            <if test="p.start != null and p.start != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &gt;= #{p.start}
+			</if>
+			<if test="p.end != null and p.end != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &lt;= #{p.end}
+			</if>
+            <if test="p.warningName != null and p.warningName != ''">
+            	AND w.warning_name like CONCAT('%',#{p.warningName},'%')
+            </if>
+            <if test="p.address != null and p.address != ''">
+            	AND w.address like CONCAT('%',#{p.address},'%')
+            </if>
+            <if test="p.eventName != null and p.eventName != ''">
+            	AND ei.event_name like CONCAT('%',#{p.eventName},'%')
+            </if>
+            <if test="p.objectName != null and p.objectName != ''">
+            	AND i.o_name like CONCAT('%',#{p.objectName},'%') 
+            </if>
+            <if test="p.flightName != null and p.flightName != ''">
+            	AND f.flignt_name like CONCAT('%',#{p.flightName},'%') 
+            </if>
+            <if test="p.businessStatus != null and p.businessStatus !=''">
+				AND ei.business_status in
+				<foreach collection="p.businessStatus" item="type" index="index"
+					open="(" close=")" separator=",">
+					#{type}
+				</foreach>
+			</if>
+            order by w.warning_time DESC,ei.event_level ASC
+   </select>
+   
+	<!--  查询及获取历史线索List列表 -->
+	<select id="getHistoryClueList"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.EventInfoTypeListVo">
+        SELECT
+			ei.uuid,
+			w.uuid AS warnId,
+			ei.business_status AS businessStatus,
+			ei.event_name AS eventName,
+			w.warning_time AS warningTime,
+			w.warning_name AS warningName,
+			w.address AS address,
+			i.o_name AS objectName,
+			ei.event_level AS eventLevel,
+			f.flignt_name AS fligntName,
+			(
+				SELECT DISTINCT
+					cb.file_id
+				FROM
+					cb_file_bus cb
+				WHERE
+					cb.bus_id = ei.uuid
+				AND cb.data_status = '1'
+				AND cb.module = 'yjmodule_img'
+			) AS fileId,
+			ei.event_type AS eventType,
+			u.ename
+		FROM
+			bot_event_info ei
+		LEFT JOIN bot_event_warning_info wi ON wi.event_uuid = ei.uuid
+		LEFT JOIN bot_event_warning w ON wi.warning_uuid = w.uuid
+		LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+		LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+		LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+		LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+		WHERE
+			ei.is_deleted = '0'
+		AND ei.business_status = '11' AND (ei.host_by is not null or ei.host_unit is not NULL)
+		AND ei.event_type = '2'
+            <if test="p.start != null and p.start != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &gt;= #{p.start}
+			</if>
+			<if test="p.end != null and p.end != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &lt;= #{p.end}
+			</if>
+            <if test="p.warningName != null and p.warningName != ''">
+            	AND w.warning_name like CONCAT('%',#{p.warningName},'%')
+            </if>
+            <if test="p.address != null and p.address != ''">
+            	AND w.address like CONCAT('%',#{p.address},'%')
+            </if>
+            <if test="p.eventName != null and p.eventName != ''">
+            	AND ei.event_name like CONCAT('%',#{p.eventName},'%')
+            </if>
+            <if test="p.objectName != null and p.objectName != ''">
+            	AND i.o_name like CONCAT('%',#{p.objectName},'%') 
+            </if>
+            <if test="p.flightName != null and p.flightName != ''">
+            	AND f.flignt_name like CONCAT('%',#{p.flightName},'%') 
+            </if>
+            order by w.warning_time DESC,ei.event_level ASC
+	</select>
+	
+</mapper>

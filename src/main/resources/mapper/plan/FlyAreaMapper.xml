@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.plan.mapper.FlyAreaMapper">
+	
+	<select id="getFlyAreaPage" resultType="HashMap">
+		SELECT
+			uuid,
+			boundary,
+			point_id,
+			DATE_FORMAT(
+				operate_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS operateTime
+		FROM
+			p_fly_area
+		WHERE
+			data_status = '1'
+		<if test="p.rangId != null and p.rangId != ''">
+          AND rang_id = #{p.rangId}
+         </if>	
+	</select>	
+	
+	<update id="updatePoint">
+		UPDATE  p_fly_area set point_id = null where  rang_id = #{p.rangId} and  point_id =#{p.pointId}  and data_status = '1'
+	</update>
+	
+	<update id="updateTimePoint">
+		UPDATE  p_output_paramter set time_include_point = null where  path_id = #{p.pathId} and data_status = '1'
+	</update>
+</mapper>

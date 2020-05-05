@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.scene.mapper.SceneMapper">
+	<select id="getAllSceneTree" resultType="HashMap">
+		SELECT
+			s.uuid as id, s.parent_id, s.name
+		FROM
+			p_scene s 
+		WHERE
+			s.data_status = '1' 
+		<if test="p.name !=null and p.name !=''">
+			and s.name like CONCAT('%',#{p.name},'%')
+		</if>
+		ORDER BY
+			s.create_time ASC
+	</select>
+
+	<select id="getSceneByDomainCodeAndSceneCode" resultType="com.chinobot.plep.home.scene.entity.Scene">
+		SELECT
+			s1.* 
+		FROM
+			p_scene s1
+			LEFT JOIN p_scene s2 ON s1.parent_id = s2.uuid 
+			AND s2.data_status = '1' 
+		WHERE
+			s1.data_status = '1'
+			and s1.parent_id is not null
+			and s1.code=#{sceneCode}
+			and s2.code=#{domainCode}
+	</select>
+</mapper>

@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_event.urgent.mapper.UrgentMapper">
+
+    <select id="getPage" resultType="java.util.Map">
+        SELECT
+          u.uuid,
+          u.urgent_name AS urgentName,
+          u.work_status AS workStatus,
+          p1.pname AS promoter,
+          p2.pname AS executor,
+          DATE_FORMAT(u.create_time, '%Y-%m-%d %H:%i:%s') AS createTime
+        FROM
+          bot_event_urgent u
+          LEFT JOIN cle_person p1
+            ON p1.uuid = u.create_by
+            AND p1.data_status = '1'
+          LEFT JOIN cle_person p2
+            ON p2.uuid = u.person_id
+            AND p2.data_status = '1'
+        WHERE u.is_deleted = '0'
+        ORDER BY u.create_time DESC
+    </select>
+    <select id="getInfo" resultType="java.util.Map">
+        SELECT
+          u.uuid,
+          u.urgent_name AS urgentName,
+          u.remark,
+          u.target_lnglat AS targetLnglat,
+          u.target_address AS targetAddress,
+          u.person_id AS personId,
+          p.pname AS personName,
+          u.person_lnglat AS personLnglat,
+          u.uav_id AS uavId,
+          ru.ename AS uavName,
+          u.fly_speed AS flySpeed,
+          u.fly_height AS flyHeight,
+          u.fly_distance AS flyDistance,
+          u.speed_second AS speedSecond,
+          u.arrival_time AS arrivalTime,
+          u.work_status AS workStatus,
+          u.route_file_id as routeFileId,
+          uf.origin_name as routeFileName,
+          CONCAT('/aiuas/api/file/ioimage?fileId=', u.route_file_id) AS routeFileUrl
+        FROM
+          bot_event_urgent u
+          LEFT JOIN cle_person p
+            ON p.uuid = u.person_id
+            AND p.data_status = '1'
+          LEFT JOIN bot_resource_uav ru
+            ON ru.uuid = u.uav_id
+            AND ru.is_deleted = '0'
+          LEFT JOIN cb_upload_file uf
+            ON uf.uuid = u.route_file_id
+        WHERE u.is_deleted = '0'
+        <if test="urgentId != null and urgentId != ''">
+            AND u.uuid = #{urgentId}
+        </if>
+    </select>
+    
+    <!-- 历史调度列表 -->
+    <select id="getHistoryUrgentList" resultType="com.chinobot.aiuas.bot_event.urgent.entity.vo.HistoryUrgentVo">
+    
+    	SELECT
+    		eu.uuid,
+			eu.urgent_name AS urgentName,
+			eu.target_address AS address,
+			p.pname AS promoter,
+			eu.create_time AS startTime,
+			p2.pname AS doPerson
+		FROM
+			bot_event_urgent eu
+		LEFT JOIN cle_person p ON p.uuid = eu.create_by
+		AND p.data_status = '1'
+		LEFT JOIN cle_person p2 ON p2.uuid = eu.person_id
+		AND p2.data_status = '1'
+		WHERE
+			eu.is_deleted = '0'
+		AND eu.work_status = '3'
+		<if test="p.urgentName != null and p.urgentName != ''">
+			AND eu.urgent_name like CONCAT('%',#{p.urgentName},'%')
+		</if>
+		<if test="p.address != null and p.address != ''">
+			AND eu.target_address like CONCAT('%',#{p.address},'%')
+		</if>
+		<if test="p.start != null and p.start != ''">
+			AND DATE_FORMAT(eu.create_time, '%Y-%m-%d') &gt;= #{p.start}
+		</if>
+		<if test="p.end != null and p.end != ''">
+			AND DATE_FORMAT(eu.create_time, '%Y-%m-%d') &lt;= #{p.end}
+		</if>
+		<if test="p.promoterId != null and p.promoterId != ''">
+			AND  p.uuid = #{p.promoterId}
+		</if>
+		<if test="p.executorId != null and p.executorId != ''">
+			AND  p2.uuid = #{p.executorId}
+		</if>
+		order by eu.create_time desc
+    </select>
+    
+    <select id="getAppUrgentList" resultType="java.util.Map">
+        SELECT
+        *
+        FROM
+        (SELECT
+            u.uuid AS task_id,
+            CONCAT("【紧急】", u.urgent_name) AS line_name,
+            u.fly_height,
+            u.fly_speed,
+            u.speed_second AS line_time,
+            2 AS point_total,
+            1 AS STATUS,
+            "2" AS workType,
+            NULL AS routeLnglats,
+            p.pname AS createPerson,
+            DATE_FORMAT(u.create_time, '%Y-%m-%d') AS createTime,
+            null as routeFileUuid
+        FROM
+        bot_event_urgent u
+        LEFT JOIN cle_person p
+        ON p.uuid = u.create_by
+        AND p.data_status = '1'
+        WHERE u.is_deleted = '0'
+        AND u.work_status IN ("1", "2")
+        <if test="p.uavId != null and p.uavId != ''">
+            AND u.uav_id = #{p.uavId}
+        </if>
+        UNION
+        ALL
+        SELECT
+            fw.uuid AS task_id,
+            CONCAT("【常规】", f.flignt_name) AS line_name,
+            NULL AS fly_height,
+            NULL AS fly_speed,
+            NULL AS line_time,
+            0 AS point_total,
+            1 AS STATUS,
+            "1" AS workType,
+            f.route_lnglats AS routeLnglats,
+            p.pname AS createPerson,
+            DATE_FORMAT(fw.create_time, '%Y-%m-%d') AS createTime,
+            f.route_file_uuid as routeFileUuid
+        FROM
+        bot_prospect_flight_work fw
+        LEFT JOIN bot_prospect_flight f
+        ON fw.flight_uuid = f.uuid
+        LEFT JOIN cle_person p
+        ON p.uuid = fw.create_by
+        AND p.data_status = '1'
+        LEFT JOIN bot_resource_uav u
+        ON u.uuid = fw.uav_uuid
+        AND u.is_deleted = '0'
+        WHERE f.route_file_type = '1'
+        AND fw.work_status IN ('2', '3')
+        AND f.is_deleted = '0'
+        <if test="p.uavId != null and p.uavId != ''">
+            AND fw.uav_uuid = #{p.uavId}
+        </if>
+        ) a
+        ORDER BY a.createTime DESC
+    </select>
+    <select id="getRouteByUrgent" resultType="java.util.Map">
+        SELECT
+          CONCAT(
+            u.person_lnglat,
+            ';',
+            u.target_lnglat
+          ) AS line,
+          0 AS mode,
+          u.uuid AS task_id,
+          "2" as workType,
+          null as workStartTime,
+          "urgent" as lineType
+        FROM
+          bot_event_urgent u
+        WHERE u.uuid = #{urgentId}
+        AND u.is_deleted = '0'
+    </select>
+    
+    <!-- 获取紧急调度列表发起人 -->
+    <select id="getDoPersons" resultType="com.chinobot.aiuas.bot_event.urgent.entity.vo.PersonListVo">
+    		
+    	SELECT DISTINCT
+			p.uuid AS id,
+			p.pname AS title
+		FROM
+			bot_event_urgent u
+			LEFT JOIN cle_person p ON u.create_by = p.uuid
+		WHERE
+			u.is_deleted = '0' AND u.work_status = '3'
+    </select>
+    
+    <!-- 获取紧急调度列表执行人 -->
+    <select id="getPersons" resultType="com.chinobot.aiuas.bot_event.urgent.entity.vo.PersonListVo">
+    		
+    	SELECT DISTINCT
+			p.uuid AS id,
+			p.pname AS title
+		FROM
+			bot_event_urgent u
+			LEFT JOIN cle_person p ON u.person_id = p.uuid
+		WHERE
+			u.is_deleted = '0' AND u.work_status = '3'
+    </select>
+    
+</mapper>

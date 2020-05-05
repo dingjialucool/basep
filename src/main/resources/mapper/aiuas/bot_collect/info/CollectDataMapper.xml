@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.info.mapper.CollectDataMapper">
+
+	<resultMap
+		type="com.chinobot.aiuas.bot_collect.info.entity.dto.InfoCheckDataListDTO"
+		id="infoCheckDataListDTO">
+		<result column="collect_uuid" property="collect_uuid" />
+		<result column="flight_date" property="flight_date" />
+		<collection property="fileList" ofType="com.chinobot.aiuas.bot_collect.info.entity.dto.InfoCheckDataFileDTO">
+			<result column="file_type" property="file_type" />
+			<collection property="fileIdList"  ofType="string">
+				<result column="file_uuid" property="fileIdList" />
+			</collection>
+		</collection>
+	</resultMap>
+	<!-- 根据类型查询采查数据 	LEFT JOIN bot_collect_flight_task t ON d.collect_uuid = t.collect_uuid 
+	AND f.flight_uuid = t.flight_uuid  -->
+	<select id="searchInfoCheckData" resultType="map">
+		SELECT
+		d.collect_uuid,
+		d.work_uuid,
+		f.flight_date,
+		d.file_type,
+		d.file_uuid 
+	FROM
+		`bot_collect_data` d
+		LEFT JOIN bot_prospect_flight_work f ON d.work_uuid = f.uuid
+		where d.is_deleted = '0' and f.work_status = '4' 
+		<if test="p.infoId != null and p.infoId != ''">
+			AND d.collect_uuid = #{p.infoId}
+		</if>
+		<if test="p.type != null and p.type != ''">
+			AND d.file_type = #{p.type}
+		</if>
+		ORDER BY f.flight_date desc
+
+	</select>
+<!-- 根据对象Id查询采查图片和视频	LEFT JOIN bot_collect_flight_task t ON d.collect_uuid = t.collect_uuid 
+	AND f.flight_uuid = t.flight_uuid  -->
+	<select id="searchInfoCheckDataDTO" resultMap="infoCheckDataListDTO">
+		SELECT d.collect_uuid,f.flight_date,d.file_type,d.file_uuid 
+		FROM 
+		`bot_collect_data` d
+		LEFT JOIN bot_prospect_flight_work f ON d.work_uuid = f.uuid
+		<!-- LEFT JOIN bot_collect_flight_task t ON d.collect_uuid = t.collect_uuid 
+		AND f.flight_uuid = t.flight_uuid  -->
+		where d.is_deleted = '0'  and f.work_status = '4' 
+		<if test="p.infoId != null and p.infoId != ''">
+			AND d.collect_uuid = #{p.infoId}
+		</if>
+		ORDER BY f.flight_date desc, d.sort asc
+
+	</select>
+<!-- 根据对象id查询采查数据视频  		and ct.collect_result = '2'   -->
+	<select id="searchInfoCheckVedioFile" resultType="com.chinobot.aiuas.bot_collect.info.entity.vo.HistoryVedioVo">
+		SELECT
+			ci.uuid AS collectUuid,
+			ci.o_name AS collectName,
+			d.create_time as createTime,
+			d.file_uuid as fileId,
+			DATE_FORMAT( fw.flight_date, '%Y-%m-%d' ) AS flightDate 
+		FROM
+			bot_collect_flight_task ft
+			JOIN bot_collect_info ci ON ci.uuid = ft.collect_uuid
+			JOIN bot_prospect_flight_work fw ON fw.flight_uuid = ft.flight_uuid
+			JOIN bot_collect_data d ON d.work_uuid = fw.uuid 
+			AND d.collect_uuid = ci.uuid
+			JOIN (
+				SELECT
+					cd.collect_uuid,
+					MAX( cd.create_time ) create_time 
+				FROM bot_collect_data cd 
+				WHERE
+					cd.is_deleted = 0 
+					AND cd.file_type = 'vedio' 
+				GROUP BY
+				cd.collect_uuid 
+				) st ON d.collect_uuid = st.collect_uuid 
+			AND d.create_time = st.create_time 
+			where ft.is_deleted = '0'  AND ci.is_deleted ='0'
+		<if test="p.taskUuid != null and p.taskUuid != '' ">
+				and ft.task_uuid = #{p.taskUuid}
+		</if>
+
+	</select>
+</mapper>

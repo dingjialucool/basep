@@ -1,0 +1,438 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.base.mapper.UavMapper">
+    <select id="getUav" resultType="map">
+        SELECT
+          u.uuid,
+          u.etype,
+		  u.ename,
+		  u.ecode,
+		  u.size,
+		  u.running_time as runningTime,
+		  u.temperature,
+		  u.param,
+		  u.run_status as runStatus,
+		  u.data_status as dataStatus,
+		  IFNULL(a.taskCount, 0) as taskCount,
+		  f.fileId
+		FROM
+		  cle_uav u
+	    LEFT JOIN
+		    (SELECT
+		      equipment_id,
+		      COUNT(task_id) AS taskCount
+		    FROM
+		      cle_task_equipment_dispatch
+		    WHERE task_id &lt;&gt; ''
+		      AND data_status = '1'
+		    GROUP BY equipment_id) a
+		    ON u.uuid = a.equipment_id
+        LEFT JOIN
+            (SELECT
+              uf.uuid AS fileId,
+              uf.path,
+              fb.bus_id
+            FROM
+              cb_upload_file uf
+              LEFT JOIN cb_file_bus fb
+                ON uf.uuid = fb.file_id
+            WHERE fb.sort = '1'
+              AND fb.module = 'equipment_album') f
+            ON f.bus_id = u.uuid
+            
+            left join cle_dept d  on d.uuid = u.dept_id
+			<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+			</if>
+			
+        WHERE 1 = 1
+        <if test="p.deptId != null and p.deptId != ''">
+               AND d.dept_code like CONCAT(d2.dept_code,'%') 
+          </if>
+        <if test="p.dataStatus != null and p.dataStatus != ''">
+          AND u.data_status = #{p.dataStatus}
+        </if>
+        <if test="p.uuid != null and p.uuid != ''">
+          AND u.uuid = #{p.uuid}
+        </if>
+        <if test="p.etype != null and p.etype != ''">
+           and u.etype in 
+		  	<foreach collection="p.etype" item="type" index="index"  
+	            open="(" close=")" separator=",">  
+	            #{type}  
+        	</foreach> 
+        </if>
+        <if test="p.ename != null and p.ename != ''">
+          AND u.ename like CONCAT('%', #{p.ename}, '%')
+        </if>
+        <if test="p.ecode != null and p.ecode != ''">
+          AND u.ecode like CONCAT('%', #{p.ecode}, '%')
+        </if>
+        <if test="p.minRunningTime != null and p.minRunningTime != ''">
+          AND u.running_time <![CDATA[ > ]]> #{p.minRunningTime}
+        </if>
+        <if test="p.maxRunningTime != null and p.maxRunningTime != ''">
+          AND u.running_time <![CDATA[ <= ]]> #{p.maxRunningTime}
+        </if>
+        <if test="p.temperature != null and p.temperature != ''">
+          AND u.temperature = #{p.temperature}
+        </if>
+        <if test="p.runStatus != null and p.runStatus != ''">
+	        and u.run_status in 
+		  	<foreach collection="p.runStatus" item="runStatus" index="index"  
+	            open="(" close=")" separator=",">  
+	            #{runStatus}  
+        	</foreach> 
+        </if>
+        order by u.operate_time desc
+    </select>
+    <!-- 飞行监控查询无人机列表 -->
+     <select id="getUavList" resultType="map">
+         SELECT
+			u.uuid,
+			u.ename,
+			u.ecode,
+			u.size,
+			u.running_time AS runTime,
+			u.param,
+			u.run_status as runStatus,
+		  	u.data_status as dataStatus,
+			IFNULL(a.taskCount, 0) as taskCount,
+			f.fileId,
+			b.longitude,
+			b.latitude,
+			b.altitude,
+			b.dump_energy  as dumpEnergy
+		FROM
+			cle_uav u
+		LEFT JOIN (
+			SELECT
+				count(uuid) AS taskCount,
+				uav_id
+			FROM
+				p_fly_task
+			WHERE
+				data_status = '1'
+			AND `status` &lt;&gt; '5'
+			GROUP BY
+				uav_id
+		) a ON a.uav_id = u.uuid
+		LEFT JOIN
+            (SELECT
+              uf.uuid AS fileId,
+              uf.path,
+              fb.bus_id
+            FROM
+              cb_upload_file uf
+              LEFT JOIN cb_file_bus fb
+                ON uf.uuid = fb.file_id
+            WHERE fb.sort = '1'
+              AND fb.module = 'equipment_album') f
+            ON f.bus_id = u.uuid
+        left join(
+			SELECT
+				uf.uav_code,
+				uf.longitude,
+				uf.latitude,
+				uf.altitude,
+				uf.dump_energy
+			FROM
+				(
+				   SELECT
+						uav_code,
+						MAX(operate_time) `time`
+					FROM
+						p_uav_flight
+					GROUP BY
+						uav_code
+				) s
+			LEFT JOIN p_uav_flight uf ON uf.uav_code = s.uav_code
+			AND uf.operate_time = s.time
+			GROUP BY
+				uf.uav_code,
+				uf.longitude,
+				uf.latitude,
+				uf.altitude,
+				uf.dump_energy
+			        ) b 
+			        on b.uav_code = u.ecode
+	    where u.data_status = '1' 
+        
+        <if test="p.uuid != null and p.uuid != ''">
+          AND u.uuid = #{p.uuid}
+        </if>
+        <if test="p.etype != null and p.etype != ''">
+           and u.etype = #{p.etype}
+        </if>
+        <if test="p.ename != null and p.ename != ''">
+          AND u.ename like CONCAT('%', #{p.ename}, '%')
+        </if>
+        <if test="p.ecode != null and p.ecode != ''">
+          AND u.ecode like CONCAT('%', #{p.ecode}, '%')
+        </if>
+        <if test="p.runStatus != null and p.runStatus != ''">
+	        and u.run_status =#{p.runStatus}
+        </if>
+    </select>
+    
+    <!-- 获取所有的无人机 -->
+     <select id="getAllUav" resultType="map">
+         SELECT
+			u.uuid,
+			u.etype,
+			u.ename,
+			u.ecode,
+			u.size,
+			u.running_time AS runTime,
+			u.param,
+			u.run_status as runStatus,
+		  	u.data_status as dataStatus,
+			IFNULL(a.taskCount, 0) as taskCount,
+			f.fileId,
+			b.longitude,
+			b.latitude,
+			b.altitude,
+			b.dump_energy  as dumpEnergy
+		FROM
+			cle_uav u
+		LEFT JOIN (
+			SELECT
+				count(uuid) AS taskCount,
+				uav_id
+			FROM
+				p_fly_task
+			WHERE
+				data_status = '1'
+			AND `status` &lt;&gt; '5'
+			GROUP BY
+				uav_id
+		) a ON a.uav_id = u.uuid
+		LEFT JOIN
+            (SELECT
+              uf.uuid AS fileId,
+              uf.path,
+              fb.bus_id
+            FROM
+              cb_upload_file uf
+              LEFT JOIN cb_file_bus fb
+                ON uf.uuid = fb.file_id
+            WHERE fb.sort = '1'
+              AND fb.module = 'equipment_album') f
+            ON f.bus_id = u.uuid
+        left join(
+			SELECT
+				uf.uav_code,
+				uf.longitude,
+				uf.latitude,
+				uf.altitude,
+				uf.dump_energy
+			FROM
+				(
+				   SELECT
+						uav_code,
+						MAX(operate_time) `time`
+					FROM
+						p_uav_flight
+					GROUP BY
+						uav_code
+				) s
+			LEFT JOIN p_uav_flight uf ON uf.uav_code = s.uav_code
+			AND uf.operate_time = s.time
+			GROUP BY
+				uf.uav_code,
+				uf.longitude,
+				uf.latitude,
+				uf.altitude,
+				uf.dump_energy
+			        ) b 
+			        on b.uav_code = u.ecode
+	    where u.data_status = '1' AND b.uav_code IS NOT NULL
+        <if test="p.ename != null and p.ename != ''">
+          AND u.ename like CONCAT('%', #{p.ename}, '%')
+        </if>
+        <if test="p.runStatus != null and p.runStatus != ''">
+          AND u.run_status = #{p.runStatus}
+        </if>
+        <if test="p.uavType != null and p.uavType != ''">
+          AND u.etype = #{p.uavType}
+        </if>
+    </select>
+    
+     <!-- 历史轨迹查询无人机列表 -->
+     <select id="getHistoryUavList" resultType="map">
+         SELECT
+			u.uuid,
+			u.ename,
+			u.ecode,
+			u.size,
+			u.running_time AS runTime,
+			u.param,
+			u.run_status as runStatus,
+		  	u.data_status as dataStatus,
+			f.fileId,
+			GROUP_CONCAT(concat( ut.longitude, ',', ut.latitude, ',', ut.create_time ) Order BY ut.create_time ASC Separator ';') as polyline
+		FROM
+			cle_uav u
+		
+		LEFT JOIN
+            (SELECT
+              uf.uuid AS fileId,
+              uf.path,
+              fb.bus_id
+            FROM
+              cb_upload_file uf
+              LEFT JOIN cb_file_bus fb
+                ON uf.uuid = fb.file_id
+            WHERE fb.sort = '1'
+              AND fb.module = 'equipment_album') f
+            ON f.bus_id = u.uuid
+       left join p_uav_trail ut
+		 on ut.uav_code=u.ecode
+	    where u.data_status = '1' 
+        
+        <if test="p.uuid != null and p.uuid != ''">
+          AND u.uuid = #{p.uuid}
+        </if>
+        <if test="p.etype != null and p.etype != ''">
+           and u.etype = #{p.etype}
+        </if>
+        <if test="p.ename != null and p.ename != ''">
+          AND u.ename like CONCAT('%', #{p.ename}, '%')
+        </if>
+        <if test="p.ecode != null and p.ecode != ''">
+          AND u.ecode like = #{p.ecode} 
+        </if>
+        <if test="p.runStatus != null and p.runStatus != ''">
+	        and u.run_status =#{p.runStatus}
+        </if>
+        <if test="p.start != null and p.start !=''">
+            and ut.create_time &gt;= #{p.start}
+        </if>
+        <if test="p.end != null and p.end !=''">
+            and ut.create_time &lt;= #{p.end}
+        </if>
+        GROUP BY 
+			u.uuid,
+			u.ename,
+			u.ecode,
+			u.size,
+			u.running_time ,
+			u.param,
+			u.run_status ,
+		  	u.data_status ,
+			f.fileId
+	HAVING GROUP_CONCAT(concat( ut.longitude, ',', ut.latitude ) Separator ';') is not null
+    </select>
+    <!-- 查询无人机任务 -->
+    <select id="getUavTask" resultType="map">
+       	select m.* from (
+       	SELECT
+			cu.uuid,
+			cu.ename,
+			cu.ecode,
+			pb.NAME AS sname,
+			ab.polyline,
+			ab.center,
+			t.STATUS,
+			f.fileId ,
+			pb.uuid as sceneId ,
+			v.videoId,
+			t.uuid as taskId 
+		FROM
+			cle_uav cu
+			LEFT JOIN p_fly_task t ON cu.uuid = t.uav_id 
+			LEFT JOIN p_building pb ON pb.uuid = t.building_id 
+			LEFT JOIN (SELECT uf.uuid AS videoId, uf.path, fb.bus_id 
+					FROM cb_upload_file uf
+					LEFT JOIN cb_file_bus fb ON uf.uuid = fb.file_id 
+					and RIGHT ( RTRIM( uf.origin_name ), LOCATE( '.', REVERSE( RTRIM( uf.origin_name ) ) ) - 1 ) IN 
+					( 'flv','mkv','mpg','mpeg','mp4','3gp','mov','rm','rmvb','swf','avi','asf',
+			'asx','FLV','MKV','MPG','MPEG','MP4','3GP','MOV','RM','RMVB','SWF','AVI','ASF','ASX' )
+					WHERE fb.sort = '1'  AND fb.module = 'vedio'  ) v ON v.bus_id = t.uuid 
+			LEFT JOIN (	SELECT uf.uuid AS fileId,	uf.path, fb.bus_id
+				 FROM cb_upload_file uf
+				LEFT JOIN cb_file_bus fb ON uf.uuid = fb.file_id 
+				WHERE	fb.sort = '1' 	AND fb.module = 'building_album' 	) f ON f.bus_id = pb.uuid
+			LEFT JOIN cle_address_base ab ON pb.abs_id = ab.uuid 
+			AND ab.atype = 'p_building' 
+			UNION ALL
+		SELECT
+			cu.uuid,
+			cu.ename,
+			cu.ecode,
+			CONCAT_WS('-',pr.name,pf.NAME) AS sname,
+			pf.boundary AS polyline,
+			NULL AS center,
+			t.STATUS,
+			f.fileId ,
+			pf.uuid as sceneId ,
+			v.videoId,
+			t.uuid as taskId
+		FROM
+			cle_uav cu
+			LEFT JOIN p_fly_task t ON cu.uuid = t.uav_id
+			LEFT JOIN p_fly_area pf ON t.point_id = pf.uuid 
+			RIGHT JOIN p_range pr on pf.rang_id = pr.uuid 
+			LEFT JOIN (SELECT uf.uuid AS videoId, uf.path, fb.bus_id 
+					FROM cb_upload_file uf
+					LEFT JOIN cb_file_bus fb ON uf.uuid = fb.file_id 
+					and RIGHT ( RTRIM( uf.origin_name ), LOCATE( '.', REVERSE( RTRIM( uf.origin_name ) ) ) - 1 ) IN 
+					( 'flv','mkv','mpg','mpeg','mp4','3gp','mov','rm','rmvb','swf','avi','asf',
+			'asx','FLV','MKV','MPG','MPEG','MP4','3GP','MOV','RM','RMVB','SWF','AVI','ASF','ASX' )
+					WHERE fb.sort = '1'  ) v ON v.bus_id = t.uuid 
+			LEFT JOIN (
+		SELECT
+			uf.uuid AS fileId,
+			uf.path,
+			fb.bus_id 
+		FROM
+			cb_upload_file uf
+			LEFT JOIN cb_file_bus fb ON uf.uuid = fb.file_id 
+		WHERE
+			fb.sort = '1' 
+			AND fb.module = 'building_album' 
+			) f ON f.bus_id = pf.uuid  
+			)m where m.sname is not null 
+        <if test="p.sname != null and p.sname != ''">
+          AND m.sname like CONCAT('%', #{p.sname}, '%')
+        </if>
+        <if test="p.uavId != null and p.uavId != ''">
+          AND m.uuid = #{p.uavId} 
+        </if>
+       <if test="p.completed == 1">
+		  AND m.status = '3'
+		</if>
+		<if test="p.completed == 0">
+		  AND m.status &lt;&gt; '3'
+		</if>
+    </select>
+    
+     <!-- 飞行监控查询无人机轨迹 -->
+     <select id="getHistoryGui" resultType="map">
+         SELECT
+			ua.uuid,
+			ua.ecode,
+			concat( ut.longitude, ',', ut.latitude ) AS polyline,
+			ut.create_time 
+		FROM
+			cle_uav ua
+			RIGHT JOIN p_uav_trail ut ON ut.uav_code = ua.ecode 
+
+		where ua.data_status = '1' and ut.data_status = '1' 
+
+         <if test="p.start != null and p.start !=''">
+            and ut.create_time &gt;= #{p.start}
+        </if>
+        <if test="p.end != null and p.end !=''">
+            and ut.create_time &lt;= #{p.end}
+        </if>
+        <if test="p.ename != null and p.ename != ''">
+          AND ua.ename like CONCAT('%', #{p.ename}, '%')
+        </if>
+        <if test="p.uavCode != null and p.uavCode != ''">
+          AND ua.ecode = #{p.uavCode}
+        </if>
+    
+	ORDER BY	ut.create_time ASC
+    </select>
+</mapper>

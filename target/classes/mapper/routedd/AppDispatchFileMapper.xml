@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.app.dispatch.mapper.AppDispatchFileMapper">
+    <select id="getDispatchFiles" resultType="com.chinobot.plep.app.dispatch.entity.AppDispatchFile">
+		SELECT
+	        *
+	    FROM
+	        p_app_dispatch_file 
+	    WHERE
+	        uav_id = #{p.uavId}
+	        AND file_name = #{p.fileName}
+	        AND DATE_FORMAT(date_created, '%Y-%m-%d %H:%i') = #{p.createTime}
+	</select>
+</mapper>

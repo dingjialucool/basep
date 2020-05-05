@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.common.message.mapper.MessageMapper">
+
+	<select id="getMyMessage" resultType="com.chinobot.common.message.entity.vo.MessageVO">
+	SELECT
+	m.uuid,
+	mc.NAME msg_name,
+	mc.CODE msg_code,
+	mc.open_type,
+	m.send_pid,
+	p.pname send_name,
+	m.receive_pid,
+	p2.pname receive_name,
+	m.url,
+	m.content,
+	m.is_read,
+	m.create_time send_time 
+FROM
+	p_message m
+	LEFT JOIN p_message_config mc ON mc.CODE = m.
+	CODE LEFT JOIN cle_person p ON p.uuid = m.send_pid
+	LEFT JOIN cle_person p2 ON p2.uuid = m.receive_pid 
+WHERE
+	m.data_status = '1' 
+	<if test="p.receivePid != null and p.receivePid != ''">
+		AND m.receive_pid = #{p.receivePid}
+	</if>
+	<if test="p.isRead != null and p.isRead != ''">
+		AND m.is_read = #{p.isRead}
+	</if>
+	<if test="p.uuid != null and p.uuid != ''">
+		AND m.uuid = #{p.uuid}
+	</if>
+	ORDER BY m.create_time desc
+	</select>
+</mapper>

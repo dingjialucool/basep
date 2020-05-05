@@ -1,0 +1,116 @@
+spring:
+  datasource:
+    url: jdbc:mysql://192.168.1.195:3306/aiuas?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&nullNamePatternMatchesAll=true
+    username: root
+    password: Chinobot%2020
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    
+  redis:
+    host: 192.168.1.185
+    port: 6379
+    password:
+    database: 0
+    timeout: 10000
+    
+  kafka:
+    bootstrap-servers: 119.3.223.186:9092
+    properties:
+      max.request.size: 500000000
+      request.timeout.ms: 3600000
+    template:
+      default-topic: aiuas # 消息主题
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: pro${random.long}
+      enable-auto-commit: true
+      auto-commit-interval: 1000
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+# 分布式文件系统fastdfs配置
+fdfs:
+  # socket连接超时时长
+  soTimeout: 3000000
+  # 连接tracker服务器超时时长
+  connectTimeout: 3000000
+  pool:
+    # 从池中借出的对象的最大数目
+    max-total: 153
+    # 获取连接时的最大等待毫秒数100
+    max-wait-millis: 102
+  # 缩略图生成参数，可选
+  thumbImage:
+    width: 150
+    height: 150
+  # 跟踪服务器tracker_server请求地址,支持多个，这里只有一个，如果有多个在下方加- x.x.x.x:port
+  trackerList:
+    - 192.168.1.185:22122
+  #
+  # 存储服务器storage_server访问地址
+  # web-server-url: http://47.106.127.177:9001/
+  web-server-url: http://192.168.1.185:9001/
+  spring:
+    http:
+      multipart:
+        max-file-size: 2048MB # 最大支持文件大小
+        max-request-size: 2048MB # 最大支持请求大小
+
+#xxljob配置
+xxl:
+  job:
+    admin:
+      ### 调度中心部署跟地址 [选填]：如调度中心集群部署存在多个地址则用逗号分隔。执行器将会使用该地址进行"执行器心跳注册"和"任务结果回调"；为空则关闭自动注册；
+      addresses: http://192.168.1.185:8080/xxl-job-admin
+    ### 执行器通讯TOKEN [选填]：非空时启用；
+    accessToken: 
+    executor:
+      ### 执行器AppName [选填]：执行器心跳注册分组依据；为空则关闭自动注册
+      appname: xxl-job-aiuas
+      ### 执行器IP [选填]：默认为空表示自动获取IP，多网卡时可手动设置指定IP，该IP不会绑定Host仅作为通讯实用；地址信息用于 "执行器注册" 和 "调度中心请求并触发任务"；
+      ip: 
+      ### 执行器端口号 [选填]：小于等于0则自动获取；默认端口为9999，单机部署多个执行器时，注意要配置不同执行器端口；
+      port: 9999
+      ### 执行器运行日志文件存储磁盘路径 [选填] ：需要对该路径拥有读写权限；为空则使用默认路径；
+      logpath: /data/applogs/xxl-job/jobhandler
+      ### 执行器日志文件保存天数 [选填] ： 过期日志自动清理, 限制值大于等于3时生效; 否则, 如-1, 关闭自动清理功能；
+      logretentiondays: 30
+
+#自定义配置
+config:
+  tempPath: /home/temp
+  zipPath: /home/zipTemp
+
+  #labelMe配置
+  labelMePath: /data/plep/html/Images
+  labelMeXmlPath: /data/plep/html/Annotations
+  labelMeIp: 172.16.16.4
+  labelMeUser: root
+  labelMePwd: CHinobot@#2019
+
+  #算法文件下载地址
+  downloadUrl: https://aiuas.binyx.vip/aiuas/api/file/ioimage?fileId=
+
+  #算法预警推送地址
+  algorithmUrl: http://172.16.16.16:8004/plep/api/kafka/send
+  
+  #算法服务器配置
+  algorithmIP: 172.16.16.7
+  algorithmUser: ubuntu
+  algorithmPwd: Chinobot2019.
+  algorithmRoot: /home/ubuntu/chinobot/
+  pointTempPath: /home/pointTemp/ # huangw批量导入专用
+  
+  #微信密钥
+  wxAppId: wx17997f0cf6aa7f9c # 小程序appID
+  wxAppSecret: 7651ed0000132c479d90d5a9c81473a0 # 小程序密钥
+  templateId: x9Wx5qq4DeoNFa6TzKgWdusR4p8kGtq_VcFIUk2Ocxw # 消息模板ID
+  newTemplateId: x9Wx5qq4DeoNFa6TzKgWdjahN-eZ3Gfn2wVaC7Hf3d0 # 紧急调度消息模板ID
+  accessTokenUrl: https://api.weixin.qq.com/cgi-bin/token # token获取地址
+  sendMsgUrl: https://api.weixin.qq.com/cgi-bin/message/subscribe/send # 发送消息地址
+  trtcAppId: 1400289103 # 音视频应用appid
+  secretId: AKID0mI8ibpemfIQK2Mgd1A2e05umOjrthYJ # 腾讯云API密钥ID
+  secretKey: mY5V1HH3Zpqb6RaWBsc79va6PTymNjod # 腾讯云API密钥key
+  templateIdFlyTask: xxxxxx #紧急 调度任务消息模板ID
+
+  fastdfsDownloadUrl: https://aiuas.binyx.vip/oos/

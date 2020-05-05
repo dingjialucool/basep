@@ -1,0 +1,823 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.warning.mapper.WarningMapper">
+
+	<resultMap type="com.chinobot.aiuas.bot_collect.warning.entity.vo.EventTraceLiveVo" id="warningAllocateMap">
+	
+		<id column="uuid" property="uuid"/>
+		<result column="eventName" property="eventName"/>
+		<result column="warningTime" property="warningTime"/>
+		<result column="warningName" property="warningName"/>
+		<result column="address" property="address"/>
+		<result column="coordinateX" property="coordinateX"/>
+		<result column="coordinateY" property="coordinateY"/>
+		<result column="indiciaW" property="indiciaW"/>
+		<result column="indiciaH" property="indiciaH"/>
+		<result column="flyLongitude" property="flyLongitude"/>
+		<result column="flyLatitude" property="flyLatitude"/>
+		<result column="flyHeight" property="flyHeight"/>
+		<result column="flySpeed" property="flySpeed"/>
+		<result column="accuracy" property="accuracy"/>
+		<result column="algorithmName" property="algorithmName"/>
+		<result column="algorithmVersion" property="algorithmVersion"/>
+		<result column="hbuuid" property="hbuuid"/>
+		<result column="fligntName" property="fligntName"/>
+		<result column="ename" property="ename"/>
+		<result column="pname" property="pname"/>
+		<result column="oName" property="oName"/>
+		<result column="objectId" property="objectId"/>
+		<result column="warningType" property="warningType"/>
+		<collection property="hostMessageVo" ofType="com.chinobot.aiuas.bot_collect.warning.entity.vo.HostMessageVo">
+			<id column="hostId" property="hostId"/>
+			<result column="hostBy" property="hostBy"/>
+			<result column="hostIdea" property="hostIdea"/>
+			<result column="operateTime" property="operateTime"/>
+			<result column="businessStatus" property="businessStatus"/>
+		</collection>
+	
+	</resultMap>
+
+  <!-- 预警信息列表及搜索查询 -->
+  <select id="getWarningList"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.WarningListVo">
+	        SELECT
+				w.uuid,
+				w.warning_time AS warningTime,
+				w.warning_name AS warningName,
+				w.address AS address,
+				u.ename,
+				i.o_name AS objectName,
+				f.flignt_name AS fligntName,
+				w.accuracy,
+				w.business_status AS businessStatus,
+				(
+					SELECT DISTINCT
+						cb.file_id
+					FROM
+						cb_file_bus cb
+					WHERE
+						cb.bus_id = w.uuid
+					AND cb.module = 'warning_img' AND cb.data_status = '1'
+				) AS fileId
+			FROM
+				bot_event_warning w
+			LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+			LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+			LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+			LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+
+            where  w.is_deleted = '0'
+            <if test="p.start != null and p.start != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &gt;= #{p.start}
+			</if>
+			<if test="p.end != null and p.end != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &lt;= #{p.end}
+			</if>
+            <if test="p.warningName != null and p.warningName != ''">
+            AND w.warning_name like CONCAT('%',#{p.warningName},'%')
+            </if>
+            <if test="p.uavId != null and p.uavId != ''">
+            AND u.uuid = #{p.uavId}
+            </if>
+            <if test="p.personId != null and p.personId != ''">
+            AND wo.person_uuid = #{p.personId}
+            </if>
+            <if test="p.flightName != null and p.flightName != ''">
+            AND f.flignt_name like CONCAT('%',#{p.flightName},'%') 
+            </if>
+            <if test="p.acStart != null and p.acStart != ''">
+				and w.accuracy &gt;= #{p.acStart}
+			</if>
+			<if test="p.acEnd != null and p.acEnd != ''">
+				and w.accuracy &lt;= #{p.acEnd}
+			</if>
+			<if test="p.objectName != null and p.objectName != ''">
+            	AND i.o_name like CONCAT('%',#{p.objectName},'%') 
+            </if>
+            <if test="p.businessStatus != null and p.businessStatus !=''">
+				AND w.business_status in
+				<foreach collection="p.businessStatus" item="type" index="index"
+					open="(" close=")" separator=",">
+					#{type}
+				</foreach>
+			</if>
+            order by w.warning_time desc
+   </select>
+   
+    <!-- 预警消息详情查询 -->
+    <select id="getWarningDetail"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.WarningVo">
+        SELECT
+			w.uuid,
+			w.warning_time AS warningTime,
+			w.warning_name AS warningName,
+			w.address AS address,
+			w.coordinate_x AS coordinateX,
+			w.coordinate_y AS coordinateY,
+			w.indicia_w AS indiciaW,
+			w.indicia_h AS indiciaH,
+			w.fly_longitude AS flyLongitude,
+			w.fly_latitude AS flyLatitude,
+			w.fly_height AS flyHeight,
+			w.fly_speed AS flySpeed,
+			w.fail_reason AS failReason,
+			w.business_status AS STATUS,
+			f.flignt_name AS fligntName,
+			u.ename,
+			pe.pname,
+			w.accuracy,
+			inf.algorithm_name AS algorithmName,
+			inf.algorithm_version AS algorithmVersion,
+			w.flight_task_uuid AS hbuuid,
+			w.task_uuid AS taskId,
+			(SELECT r.`name` FROM p_rule r WHERE r.data_status = '1' AND r.uuid = w.filter_rule ) AS ruleName,
+			(SELECT pname FROM cle_person p WHERE p.uuid = ei.host_by) AS hostBy,
+			(SELECT pname FROM cle_person p WHERE p.uuid = ei.host_by_govern)  AS hostByGovern,
+			(SELECT pname FROM cle_person p WHERE p.uuid = ei.host_by_rescue)  AS hostByRescue,
+			(SELECT dname FROM cle_dept d WHERE d.uuid = ei.host_unit) AS hostUnit,
+			(SELECT dname FROM cle_dept d WHERE d.uuid = ei.host_unit_govern)  AS hostUnitGovern,
+			(SELECT dname FROM cle_dept d WHERE d.uuid = ei.host_unit_rescue)  AS hostUnitRescue
+		FROM
+			bot_event_warning w
+		LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+		LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+		LEFT JOIN cle_person pe ON pe.uuid = wo.person_uuid
+		LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+		LEFT JOIN bot_algorithm_info inf ON w.algorithm_info_uuid = inf.uuid
+		LEFT JOIN bot_event_warning_info wi ON wi.warning_uuid = w.uuid
+		LEFT JOIN bot_event_info ei ON ei.uuid = wi.event_uuid
+            where w.uuid= #{uuid}
+   </select>
+   
+   <!-- 事件列表及搜索查询 -->
+   <select id="getDistributionLiveList"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.EventInfoListVo">
+		 SELECT
+			ei.uuid,
+			w.uuid AS warnId,
+			i.o_name AS objectName,
+			ei.business_status AS businessStatus,
+			ei.event_name AS eventName,
+			w.warning_time AS warningTime,
+			w.warning_name AS warningName,
+			w.address AS address,
+			ei.event_type AS eventType,
+			f.flignt_name AS fligntName,
+			(
+				SELECT DISTINCT
+					cb.file_id
+				FROM
+					cb_file_bus cb
+				WHERE
+					cb.bus_id = ei.uuid
+				AND cb.data_status = '1'
+				AND cb.module = 'yjmodule_img'
+			) AS fileId,
+			IFNULL(
+				(
+					SELECT
+						d.dname AS deptName
+					FROM
+						bot_event_info i
+					LEFT JOIN cle_person pe ON pe.uuid = i.host_by
+					LEFT JOIN cle_dept d ON d.uuid = IFNULL(pe.dept_id, i.host_unit)
+					WHERE
+						i.business_status IN (10, 30, 40)
+					AND i.uuid = ei.uuid
+				),
+				(
+					SELECT
+						d.dname AS deptName
+					FROM
+						bot_event_info i
+					LEFT JOIN cle_person pe ON pe.uuid = i.host_by_govern
+					LEFT JOIN cle_dept d ON d.uuid = IFNULL(
+						pe.dept_id,
+						i.host_unit_govern
+					)
+					WHERE
+						i.business_status IN (11, 20)
+					AND i.uuid = ei.uuid
+				)
+			) AS deptName
+		FROM
+			bot_event_info ei
+		LEFT JOIN bot_event_warning_info wi ON wi.event_uuid = ei.uuid
+		LEFT JOIN bot_event_warning w ON wi.warning_uuid = w.uuid
+		LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+		LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+		LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+		LEFT JOIN cle_person pe1 ON pe1.uuid = ei.host_by
+		LEFT JOIN cle_person pe2 ON pe2.uuid = ei.host_by_govern
+		WHERE
+			ei.is_deleted = '0' AND (ei.host_by is not null or ei.host_unit is not NULL)
+		AND ei.business_status NOT IN (11, 88, 90, 99)
+            <if test="p.start != null and p.start != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &gt;= #{p.start}
+			</if>
+			<if test="p.end != null and p.end != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &lt;= #{p.end}
+			</if>
+            <if test="p.address != null and p.address != ''">
+            	AND w.address like CONCAT('%',#{p.address},'%')
+            </if>
+            <if test="p.eventName != null and p.eventName != ''">
+            	AND ei.event_name like CONCAT('%',#{p.eventName},'%')
+            </if>
+            <if test="p.personId != null and p.personId != ''">
+            	AND wo.person_uuid = #{p.personId}
+            </if>
+            <if test="p.flightName != null and p.flightName != ''">
+            	AND f.flignt_name like CONCAT('%',#{p.flightName},'%') 
+            </if>
+            <if test="p.objectName != null and p.objectName != ''">
+            	AND i.o_name like CONCAT('%',#{p.objectName},'%') 
+            </if>
+            <if test="p.businessStatus != null and p.businessStatus !=''">
+				AND ei.business_status in
+				<foreach collection="p.businessStatus" item="type" index="index"
+					open="(" close=")" separator=",">
+					#{type}
+				</foreach>
+			</if>
+			<if test="p.eventType != null and p.eventType !=''">
+				AND ei.event_type in
+				<foreach collection="p.eventType" item="type" index="index"
+					open="(" close=")" separator=",">
+					#{type}
+				</foreach>
+			</if>
+            order by w.warning_time DESC,ei.event_level ASC,ei.business_status ASC
+   </select>
+   
+    <!-- 事件详情查询 -->
+    <select id="getDistributionLiveDetail"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.DistributionLiveVo">
+        SELECT
+			ei.uuid,
+			ei.event_name AS eventName,
+			w.warning_time AS warningTime,
+			w.warning_name AS warningName,
+			w.address AS address,
+			w.coordinate_x AS coordinateX,
+			w.coordinate_y AS coordinateY,
+			w.indicia_w AS indiciaW,
+			w.indicia_h AS indiciaH,
+			w.fly_longitude AS flyLongitude,
+			w.fly_latitude AS flyLatitude,
+			w.fly_height AS flyHeight,
+			w.fly_speed AS flySpeed,
+			w.accuracy,
+			inf.algorithm_name AS algorithmName,
+			inf.algorithm_version AS algorithmVersion,
+			w.flight_task_uuid AS hbuuid,
+			f.flignt_name AS fligntName,
+			u.ename,
+			wo.person_uuid AS personUuid,
+			i.o_name AS oName,
+			ei.business_status AS businessStatus,
+			ei.host_by AS hostBy,
+			w.collect_object_uuid AS objectId,
+			w.warning_type AS warningType
+		FROM
+			bot_event_info ei
+		LEFT JOIN bot_event_warning_info wi ON wi.event_uuid = ei.uuid
+		LEFT JOIN bot_event_warning w ON wi.warning_uuid = w.uuid
+		LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+		LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+		LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+		LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+		LEFT JOIN bot_algorithm_info inf ON w.algorithm_info_uuid = inf.uuid
+		WHERE
+             ei.uuid= #{uuid}
+   </select>
+   
+   <!-- 事件分拨列表及搜索查询 -->
+   <select id="geteventTraceList"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.EventTraceListVo">
+        	SELECT
+				ei.uuid,
+				w.uuid AS warnId,
+				ei.business_status AS businessStatus,
+				ei.event_name AS eventName,
+				w.warning_time AS warningTime,
+				w.warning_name AS warningName,
+				w.address AS address,
+				ei.event_level AS eventLevel,
+				f.flignt_name AS fligntName,
+				i.o_name AS objectName,
+				(
+					SELECT DISTINCT
+						cb.file_id
+					FROM
+						cb_file_bus cb
+					WHERE
+						cb.bus_id = ei.uuid
+					AND cb.data_status = '1'
+					AND cb.module = 'yjmodule_img'
+				) AS fileId,
+				IFNULL(pe1.dept_id, ei.host_unit) AS ffDeptId,
+				IFNULL(
+					pe2.dept_id,
+					ei.host_unit_govern
+				) AS zlDeptId,
+				IFNULL(
+					pe3.dept_id,
+					ei.host_unit_rescue
+				) AS jyDeptId
+			FROM
+				bot_event_info ei
+			LEFT JOIN bot_event_warning_info wi ON wi.event_uuid = ei.uuid
+			LEFT JOIN bot_event_warning w ON wi.warning_uuid = w.uuid
+			LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+			LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+			LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+			LEFT JOIN cle_person pe1 ON pe1.uuid = ei.host_by
+			LEFT JOIN cle_person pe2 ON pe2.uuid = ei.host_by_govern
+			LEFT JOIN cle_person pe3 ON pe3.uuid = ei.host_by_rescue
+			WHERE
+				ei.is_deleted = '0'
+			AND ei.business_status NOT IN (88, 90, 99) AND w.fail_reason IS NULL
+			AND ei.event_type = '1'
+			AND( 
+			(ei.host_unit = #{p.deptId} AND ei.business_status in (10,20,30,40))
+			OR
+			(ei.host_unit_govern = #{p.deptId} AND  ei.business_status = '20')
+			OR
+			(ei.host_unit_rescue = #{p.deptId} AND ei.business_status in (10,20,30,40))
+			OR
+			(ei.host_by = #{p.personId} AND ei.business_status in (10,20,30,40))
+			OR
+			(ei.host_by_govern = #{p.personId} AND  ei.business_status = '20')
+			OR
+			(ei.host_by_rescue = #{p.personId} AND ei.business_status in (10,20,30,40))
+			 )
+            <if test="p.start != null and p.start != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &gt;= #{p.start}
+			</if>
+			<if test="p.end != null and p.end != ''">
+				and DATE_FORMAT(w.warning_time, '%Y-%m-%d') &lt;= #{p.end}
+			</if>
+            <if test="p.warningName != null and p.warningName != ''">
+            AND w.warning_name like CONCAT('%',#{p.warningName},'%')
+            </if>
+            <if test="p.address != null and p.address != ''">
+            	AND w.address like CONCAT('%',#{p.address},'%')
+            </if>
+            <if test="p.eventName != null and p.eventName != ''">
+            	AND ei.event_name like CONCAT('%',#{p.eventName},'%')
+            </if>
+            <if test="p.objectName != null and p.objectName != ''">
+            	AND i.o_name like CONCAT('%',#{p.objectName},'%') 
+            </if>
+            <if test="p.flightName != null and p.flightName != ''">
+            AND f.flignt_name like CONCAT('%',#{p.flightName},'%') 
+            </if>
+          
+            <if test="p.businessStatus != null and p.businessStatus !=''">
+				AND ei.business_status in
+				<foreach collection="p.businessStatus" item="type" index="index"
+					open="(" close=")" separator=",">
+					#{type}
+				</foreach>
+			</if>
+			
+            order by w.operate_time DESC,ei.business_status ASC
+   </select>
+   
+   <!-- 事件分拨详情查询 -->
+    <select id="geteventTraceDetail"  resultMap="warningAllocateMap">
+        SELECT
+			ei.uuid,
+			ei.event_name AS eventName,
+			w.warning_time AS warningTime,
+			w.warning_name AS warningName,
+			w.address AS address,
+			w.coordinate_x AS coordinateX,
+			w.coordinate_y AS coordinateY,
+			w.indicia_w AS indiciaW,
+			w.indicia_h AS indiciaH,
+			w.fly_longitude AS flyLongitude,
+			w.fly_latitude AS flyLatitude,
+			w.fly_height AS flyHeight,
+			w.fly_speed AS flySpeed,
+			w.accuracy,
+			inf.algorithm_name AS algorithmName,
+			inf.algorithm_version AS algorithmVersion,
+			w.flight_task_uuid AS hbuuid,
+			f.flignt_name AS fligntName,
+			u.ename,
+			fly.pname,
+			i.o_name AS oName,
+			pe.pname AS hostBy,
+			ef.operate_time AS operateTime,
+			ef.host_idea AS hostIdea,
+			ef.business_status AS businessStatus,
+			ef.uuid as hostId,
+			ef.create_time,
+			w.collect_object_uuid AS objectId,
+			w.warning_type AS warningType
+		FROM
+			bot_event_info ei
+		LEFT JOIN bot_event_warning_info ewi ON ewi.event_uuid = ei.uuid
+		LEFT JOIN bot_event_warning w ON ewi.warning_uuid = w.uuid
+		LEFT JOIN bot_algorithm_info inf ON w.algorithm_info_uuid = inf.uuid
+		LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+		LEFT JOIN cle_person fly ON fly.uuid = wo.person_uuid
+		LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+		LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+		LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+		LEFT JOIN bot_event_flow ef ON ef.event_uuid = ei.uuid
+		LEFT JOIN cle_person pe ON pe.uuid = ef.host_by
+		WHERE
+			ei.uuid = #{uuid}
+		UNION ALL
+			SELECT
+				ei.uuid,
+				ei.event_name AS eventName,
+				w.warning_time AS warningTime,
+				w.warning_name AS warningName,
+				w.address AS address,
+				w.coordinate_x AS coordinateX,
+				w.coordinate_y AS coordinateY,
+				w.indicia_w AS indiciaW,
+				w.indicia_h AS indiciaH,
+				w.fly_longitude AS flyLongitude,
+				w.fly_latitude AS flyLatitude,
+				w.fly_height AS flyHeight,
+				w.fly_speed AS flySpeed,
+				w.accuracy,
+				inf.algorithm_name AS algorithmName,
+				inf.algorithm_version AS algorithmVersion,
+				w.flight_task_uuid AS hbuuid,
+				f.flignt_name AS fligntName,
+				u.ename,
+				fly.pname,
+				i.o_name AS oName,
+				pe.pname AS hostBy,
+				ef.supervise_time AS operateTime,
+				ef.supervise_content AS hostIdea,
+				'99' AS businessStatus,
+				ef.uuid as hostId,
+				ef.create_time,
+				w.collect_object_uuid AS objectId,
+				w.warning_type AS warningType
+			FROM
+				bot_event_info ei
+			LEFT JOIN bot_event_warning_info ewi ON ewi.event_uuid = ei.uuid
+			LEFT JOIN bot_event_warning w ON ewi.warning_uuid = w.uuid
+			LEFT JOIN bot_algorithm_info inf ON w.algorithm_info_uuid = inf.uuid
+			LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+			LEFT JOIN cle_person fly ON fly.uuid = wo.person_uuid
+			LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+			LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+			LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+			LEFT JOIN bot_event_supervise ef ON ef.event_uuid = ei.uuid
+			LEFT JOIN cle_person pe ON pe.uuid = ef.supervise_by
+			WHERE
+				ei.uuid = #{uuid} AND ef.uuid IS NOT NULL
+			ORDER BY
+				create_time ASC
+   </select>
+   
+   <!-- 事件反馈列表及搜索查询 -->
+   <select id="getEventFeedbackList"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.WarningListVo">
+        SELECT
+            ei.uuid,
+            w.warning_time AS warningTime,
+            w.warning_name AS warningName,
+            w.address AS address,
+            u.ename,
+            f.flignt_name AS fligntName,
+            w.accuracy,
+            w.business_status AS businessStatus,
+            wo.person_uuid AS personUuid,
+            e.path,
+            ei.event_level AS eventLevel
+        FROM
+            bot_event_warning w
+            LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+            LEFT JOIN bot_prospect_flight f ON wo.flight_uuid =f.uuid
+            LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+            LEFT JOIN bot_file_business_event ev ON w.uuid=ev.business_uuid
+            LEFT JOIN bot_file_upload_event e ON ev.file_uuid=e.uuid
+            LEFT JOIN bot_event_warning_info wi ON w.uuid=wi.warning_uuid
+            LEFT JOIN bot_event_info ei ON wi.event_uuid=ei.uuid
+            where 1=1 
+            <if test="p.warningTime != null and p.warningTime != ''">
+            AND w.warning_time = #{p.warningTime}
+            </if>
+            <if test="p.eventName != null and p.eventName != ''">
+            AND ei.event_name like ('%${p.eventName}%')
+            </if>
+            <if test="p.warningName != null and p.warningName != ''">
+            AND w.warning_name like ('%${p.warningName}%')
+            </if>
+            <if test="p.address != null and p.address != ''">
+            AND w.address like ('%${p.address}%')
+            </if>
+            <if test="p.fxy != null and p.fxy != ''">
+            AND wo.person_uuid = #{p.fxy}
+            </if>
+            <if test="p.fligntName != null and p.fligntName != ''">
+            AND f.flignt_name like ('%${p.fligntName}%')
+            </if>
+            <if test="p.businessStatus != null and p.businessStatus != ''">
+            AND w.business_status = #{p.businessStatus}
+            </if>
+            order by w.warning_time DESC,ei.event_level ASC,w.business_status ASC
+   </select>
+   
+    <!-- 事件反馈详情查询-->
+    <select id="getEventFeedbackDetail"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.EventFeedbackVo">
+        SELECT
+            w.uuid,
+            e.path,
+            w.warning_time AS warningTime,
+            w.warning_name AS warningName,
+            w.address AS address,
+            w.coordinate_x AS coordinateX,
+            w.coordinate_y AS coordinateY,
+            w.indicia_w AS indiciaW,
+            w.indicia_h AS indiciaH,
+            w.fly_longitude AS flyLongitude,
+            w.fly_latitude AS flyLatitude,
+            w.fly_height AS flyHeight,
+            w.fly_speed AS flySpeed,
+            f.flignt_name AS fligntName,
+            u.ename,
+            wo.person_uuid AS personUuid,
+            i.o_name AS oName,
+            w.accuracy,
+            inf.algorithm_name AS algorithmName,
+            inf.algorithm_version AS algorithmVersion,
+            ei.event_name AS eventName,
+            w.flight_task_uuid AS hbuuid,
+            ef.host_by AS qrhostBy
+        FROM
+            bot_event_warning w
+            LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+            LEFT JOIN bot_prospect_flight f ON wo.flight_uuid =f.uuid
+            LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+            LEFT JOIN bot_collect_info i ON w.collect_object_uuid=i.uuid
+            LEFT JOIN bot_algorithm_info inf ON w.algorithm_info_uuid=inf.uuid
+            LEFT JOIN bot_file_business_event ev ON w.uuid=ev.business_uuid
+            LEFT JOIN bot_file_upload_event e ON ev.file_uuid=e.uuid
+            LEFT JOIN bot_event_warning_info wi ON w.uuid=wi.warning_uuid
+            LEFT JOIN bot_event_info ei ON wi.event_uuid=ei.uuid
+            LEFT JOIN bot_event_flow ef ON ei.uuid=ef.event_uuid AND ef.business_status='02'
+            where w.uuid= #{uuid}
+   </select>
+   
+   
+   <!-- 根据uuid批量修改预警事件表的业务状态-->
+   <update id="updateBIBS"  parameterType="String">
+          update bot_event_info SET 
+          <if test="p.businessStatus != null and p.businessStatus != ''">
+            business_status=#{p.businessStatus} 
+          </if>
+          <if test="p.hostBy != null and p.hostBy != ''">
+            ,host_by=#{p.hostBy} 
+          </if>
+          where uuid = #{p.uuid}
+   </update>
+   <!-- 根据event_uuid批量修改预警事件流转记录表的业务状态-->
+   <update id="updateBFBS"  parameterType="String">
+          update bot_event_flow SET 
+          <if test="p.businessStatus != null and p.businessStatus != ''">
+            business_status=#{p.businessStatus} 
+          </if>
+          <if test="p.hostBy != null and p.hostBy != ''">
+            , host_by=#{p.hostBy} 
+          </if>
+          where event_uuid = #{p.uuid}
+   </update>
+   <!-- 根据uuid修改预警预警信息表业务状态-->
+   <update id="updateWI"  parameterType="String">
+          update bot_event_warning SET business_status=#{businessStatus}, where event_uuid =#{eventUuid}
+   </update>
+   
+   <!-- 单个预警事件查询 -->
+  <select id="getBotEventInfo" resultType="HashMap">
+        SELECT 
+        *
+        FROM 
+        bot_event_info
+        where 
+        uuid=(
+        SELECT
+            ifs.uuid
+        FROM
+            bot_event_warning w
+            LEFT JOIN bot_event_warning_info wif ON w.uuid = wif.warning_uuid
+            LEFT JOIN bot_event_info ifs ON wif.event_uuid =ifs.uuid
+        where
+         w.uuid=#{uuid});
+   </select>
+   
+    
+    <!-- 获取预警信息的图片或视频 -->
+    <select id="getWarnByBusId" resultType="string">
+    
+    	SELECT
+			fb.file_id AS fileId
+		FROM
+			cb_file_bus fb
+		WHERE
+			fb.data_status = '1'
+		
+		AND fb.bus_id = #{p.busId}
+		<if test="p.module != null and p.module != ''">
+           AND fb.module = #{p.module}
+        </if>
+    
+	</select>
+	
+	<!-- 获取反馈信息集合 -->
+	<!-- <select id="getFeedBackList" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.FeedBackVo">
+			
+			SELECT
+				pe.pname AS feedbackBy,
+				fb.feedback_time AS feedbackTime,
+				fb.feedback_content AS feedbackContent,
+				ev.file_id AS feedBackFileId,
+				uf.origin_name AS fileName
+			FROM
+				bot_event_feedback fb
+			LEFT JOIN bot_event_info ei ON fb.event_uuid = ei.uuid
+			LEFT JOIN cle_person pe ON pe.uuid = fb.feedback_by
+			LEFT JOIN cb_file_bus ev ON ev.bus_id = fb.uuid
+			AND ev.module = 'fkmodule_file'
+			LEFT JOIN cb_upload_file uf ON uf.uuid = ev.file_id
+			WHERE
+				fb.is_deleted = '0'
+			AND  ei.uuid = #{uuid}
+	</select>
+	 -->
+	<!-- 获取督办信息集合 -->
+	<select id="getSuperviseList" resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.SuperviseVo">
+			
+			SELECT
+				sp.supervise_time AS superviseTime,
+				sp.supervise_content AS superviseContent,
+				pe.pname AS superviseBy
+			FROM
+				bot_event_supervise sp
+			LEFT JOIN bot_event_info ei ON sp.event_uuid = ei.uuid
+			LEFT JOIN cle_person pe ON pe.uuid = sp.supervise_by
+			WHERE
+				sp.is_deleted = '0' 
+				AND ei.uuid = #{uuid}
+				order by sp.supervise_time desc
+	</select>
+	
+	<!-- 获取流转记录表中的发送人、发送时间 -->
+	<select id="getSendAndSendTime" resultType="com.chinobot.aiuas.bot_collect.warning.entity.EventFlow">
+		SELECT
+			ei.uuid as eventUuid,
+			IFNULL(ef.host_by, ei.operate_by) AS sendBy,
+			IFNULL(
+				ef.create_time,
+				ei.operate_time
+			) AS sendTime
+		FROM
+			bot_event_info ei
+		LEFT JOIN bot_event_flow ef ON ef.event_uuid = ei.uuid
+		AND ef.business_status = #{status}
+		WHERE
+			ei.uuid = #{uuid}
+		Order by ef.operate_time desc
+		limit 0,1
+	</select>
+	
+	<!-- 根据预警事件id获取预警消息 -->
+	<select id="getWarnByEventId" resultType="com.chinobot.aiuas.bot_collect.warning.entity.Warning">
+		SELECT
+			ew.*
+		FROM
+			bot_event_warning ew
+		LEFT JOIN bot_event_warning_info ewi ON ewi.warning_uuid = ew.uuid
+		LEFT JOIN bot_event_info ei ON ei.uuid = ewi.event_uuid
+		WHERE
+			ei.uuid = #{uuid}
+	</select>
+	
+	<!-- 获取预警信息的图片或视频 -->
+    <select id="getFileMessage" resultType="com.chinobot.aiuas.bot_collect.warning.entity.dto.FileMessageDTO">
+    
+    	SELECT
+			fb.file_id AS fileId,
+			uf.origin_name AS fileName
+		FROM
+			cb_file_bus fb
+		LEFT JOIN cb_upload_file uf ON fb.file_id = uf.uuid
+		WHERE
+			fb.data_status = '1'
+		AND fb.bus_id = #{p.busId}
+		<if test="p.module != null and p.module != ''">
+           AND fb.module = #{p.module}
+        </if>
+    
+	</select>
+	
+	<!-- 获取历史线索详情 -->
+	<select id="getHistoryClueDetail"
+            resultType="com.chinobot.aiuas.bot_collect.warning.entity.vo.HistoryClueVo">
+        SELECT
+			ei.uuid,
+			ei.event_name AS eventName,
+			w.warning_time AS warningTime,
+			w.warning_name AS warningName,
+			w.address AS address,
+			w.coordinate_x AS coordinateX,
+			w.coordinate_y AS coordinateY,
+			w.indicia_w AS indiciaW,
+			w.indicia_h AS indiciaH,
+			w.fly_longitude AS flyLongitude,
+			w.fly_latitude AS flyLatitude,
+			w.fly_height AS flyHeight,
+			w.fly_speed AS flySpeed,
+			w.accuracy,
+			inf.algorithm_name AS algorithmName,
+			inf.algorithm_version AS algorithmVersion,
+			w.flight_task_uuid AS hbuuid,
+			f.flignt_name AS fligntName,
+			u.ename,
+			wo.person_uuid AS personUuid,
+			i.o_name AS oName,
+			ei.business_status AS businessStatus,
+			ei.host_by AS hostBy,
+			w.flight_task_uuid AS hbuuid,
+			pe.pname AS qrhostBy,
+			ef.operate_time AS qroperateTime,
+			ef.host_idea as qrhostIdea,
+			w.collect_object_uuid AS objectId,
+			w.warning_type AS warningType
+		FROM
+			bot_event_info ei
+		LEFT JOIN bot_event_warning_info wi ON wi.event_uuid = ei.uuid
+		LEFT JOIN bot_event_warning w ON wi.warning_uuid = w.uuid
+		LEFT JOIN bot_event_flow ef ON ef.event_uuid = ei.uuid
+		AND ef.business_status = '11'
+		LEFT JOIN cle_person pe ON pe.uuid = ef.host_by
+		LEFT JOIN bot_prospect_flight_work wo ON w.flight_task_uuid = wo.uuid
+		LEFT JOIN bot_prospect_flight f ON wo.flight_uuid = f.uuid
+		LEFT JOIN bot_resource_uav u ON wo.uav_uuid = u.uuid
+		LEFT JOIN bot_collect_info i ON w.collect_object_uuid = i.uuid
+		LEFT JOIN bot_algorithm_info inf ON w.algorithm_info_uuid = inf.uuid
+		WHERE
+             ei.uuid= #{uuid}
+	</select>
+	
+	<resultMap type="com.chinobot.aiuas.bot_prospect.flight.entity.vo.CollectResultVo" id="collectDataRsMap" autoMapping="true">
+		<id column="collect_id" property="collectId"/>
+		<collection property="list" ofType="com.chinobot.aiuas.bot_prospect.flight.entity.vo.CollectResultItemVo" autoMapping="true">
+			<id column="rs_key" property="rsKey"/>
+		</collection>
+	</resultMap>
+	
+	<!-- 数量统计 -->
+	<select id="getResultByWarnId" resultMap="collectDataRsMap">
+		
+		SELECT
+			cr.work_id,
+			cr.collect_id,
+			ci.o_name collect_name,
+			DATE_FORMAT(
+				cr2.rs_value,
+				'%H:%i'
+			) AS start_time,
+			DATE_FORMAT(
+				cr3.rs_value,
+				'%H:%i'
+			) AS end_time,
+			cr.rs_key rs_key,
+			cr.remark title,
+			IFNULL(b.fieldname, cr.rs_value) val,
+			cr.base_data_code
+		FROM
+			bot_collect_result cr
+		LEFT JOIN bot_collect_result cr2 ON cr2.work_id = cr.work_id
+		AND cr2.rs_key = 'startTime'
+		AND cr2.collect_id = cr.collect_id
+		LEFT JOIN bot_collect_result cr3 ON cr3.work_id = cr.work_id
+		AND cr3.rs_key = 'endTime'
+		AND cr3.collect_id = cr.collect_id
+		LEFT JOIN bot_collect_info ci ON ci.uuid = cr.collect_id
+		LEFT JOIN cb_basedata b ON b.data_status = '1'
+		AND b.typecode = cr.base_data_code
+		AND b.fieldcode = cr.rs_value
+		WHERE
+			cr.collect_id = #{objectId}
+		AND cr.work_id = #{workId}
+		AND cr.rs_key != 'startTime'
+		AND cr.rs_key != 'endTime'
+		ORDER BY
+			cr.rs_key,
+			cr.create_time DESC
+		
+	</select>
+	
+</mapper>

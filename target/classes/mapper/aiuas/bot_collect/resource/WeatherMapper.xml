@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.aiuas.bot_collect.resource.mapper.WeatherMapper">
+<!-- 获取标签页城市信息 -->
+	<select id="getCityCode" resultType="com.chinobot.aiuas.bot_collect.resource.entity.vo.WeatherCityInfoVo">
+	select distinct f.* from ( SELECT
+		w.city,
+		w.adcode,
+		DATE_FORMAT(w.create_time, '%Y-%m-%d') as createTime
+	FROM
+		bot_resource_weather w 
+	WHERE
+		w.is_deleted = 0 
+	GROUP BY
+		w.city,
+		w.adcode,
+		w.create_time
+		order by w.create_time asc ) f
+		
+</select>
+<select id="getCityWeartherByAdcode" resultType="com.chinobot.aiuas.bot_collect.resource.entity.vo.WeatherVo">
+	SELECT
+		w.city,
+		w.adcode,
+		DATE_FORMAT(w.report_time, '%Y-%m-%d %H:%i%:%s') as reportTime,
+		DATE_FORMAT(w.create_time, '%Y-%m-%d %H:%i%:%s') as createTime,
+		DATE_FORMAT(w.cast_date, '%Y-%m-%d') as castDate,
+		w.day_weather as dayWeather,
+		w.night_weather as nightWeather,
+		w.day_temp as dayTemp,
+		w.night_temp as nightTemp,
+		w.day_wind as dayWind,
+		w.night_wind as nightWind,
+		w.day_power as dayPower,
+		w.night_power as nightPower
+	FROM
+		bot_resource_weather w 
+	WHERE
+		w.is_deleted = 0 
+		<if test="p.adcode != null and p.adcode != '' ">
+			and w.adcode = #{p.adcode}
+		</if>
+	GROUP BY
+		w.city,
+		w.adcode,
+		w.report_time,
+		w.create_time,
+		w.cast_date,
+		w.day_weather,
+		w.night_weather,
+		w.day_temp,
+		w.night_temp,
+		w.day_wind,
+		w.night_wind,
+		w.day_power,
+		w.night_power  
+	ORDER BY
+		w.cast_date ASC
+		
+</select>
+
+</mapper>

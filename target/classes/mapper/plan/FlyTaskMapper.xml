@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.plan.mapper.FlyTaskMapper">
+
+	<select id="getTaskPage" resultType="map">
+		SELECT
+	ft.uuid,
+	CASE WHEN ft.building_id is null THEN
+		'0'
+	ELSE
+		'1'
+END as is_building,
+	fp.name plan_name,
+	r.name range_name,
+	fa.name area_name,
+	b.name building_name,
+	fp.plan_type,
+fp.strategy type,
+fp.special_type,
+ft.status,
+fa.boundary,
+ab.center,
+ab.polyline,
+ft.create_time as c_time,
+IFNULL(fb1.f_count,0) img_count,
+IFNULL(fb2.f_count,0) vedio_count,
+IFNULL(fb3.f_count,0) other_count,
+
+CASE WHEN rr.uuid is null THEN
+		'0'
+	ELSE
+		'1'
+END as has_review
+FROM
+	p_fly_task ft 
+	left join p_fly_plan fp 
+	on fp.uuid=ft.plan_id
+  left join p_fly_area fa 
+	on fa.uuid=ft.point_id
+	left join p_range r
+	on fa.rang_id= r.uuid
+	left join p_building b
+	on b.uuid=ft.building_id
+	left join cle_address_base ab
+	on ab.uuid=b.abs_id
+	left join p_review_record rr
+	on rr.reform_id=fp.reform_id
+	left join (select fb.bus_id,fb.module,count(*) f_count from cb_file_bus fb GROUP BY fb.bus_id,fb.module) fb1
+	on fb1.bus_id=ft.uuid and fb1.module='img'
+	left join (select fb.bus_id,fb.module,count(*) f_count from cb_file_bus fb GROUP BY fb.bus_id,fb.module) fb2
+	on fb2.bus_id=ft.uuid and fb2.module='vedio'
+	left join (select fb.bus_id,fb.module,count(*) f_count from cb_file_bus fb GROUP BY fb.bus_id,fb.module) fb3
+	on fb3.bus_id=ft.uuid and fb3.module='other'
+WHERE
+	ft.data_status = '1'
+	<if test="p.dept_id != null and p.dept_id != ''">
+	and fp.dept_id=#{p.dept_id}
+	</if>
+	<if test="p.name != null and p.name != ''">
+	and CONCAT(IFNULL(fp.name,''),'#',IFNULL(r.name,''),'#',IFNULL(fa.name,''),'#',IFNULL(b.name,'')) like CONCAT('%',#{p.name},'%')
+	</if>
+	<if test="p.status != null and p.status != ''">
+	and ft.status = #{p.status}
+	</if>
+	<if test="p.uuid != null and p.uuid != ''">
+	and ft.uuid = #{p.uuid}
+	</if>
+	</select>
+
+	
+	<select id="getTaskByTime" resultType="map">
+		SELECT
+			a.taskCount,
+			b.finishTaskCount
+		FROM
+			(
+				SELECT
+					count(uuid) AS taskCount
+				FROM
+					p_fly_task
+				WHERE
+					data_status = '1'
+				AND `status` IN (0,1,3,5) And uav_id is not null
+			) a,
+			(
+				SELECT
+					count(uuid) AS finishTaskCount
+				FROM
+					p_fly_task
+				WHERE
+					data_status = '1'
+				AND `status` IN (3) And uav_id is not null
+			) b
+		 
+	</select>
+
+
+	
+	<select id="getUavList" resultType="map">
+	select u.uuid,u.ename,count(ft.uuid) task_count from cle_uav u left join p_fly_task ft on ft.uav_id=u.uuid and ft.status='1' where u.data_status='1' group by u.uuid,u.ename
+	</select>
+
+</mapper>

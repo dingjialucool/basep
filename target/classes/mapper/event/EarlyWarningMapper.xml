@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper
+	namespace="com.chinobot.plep.home.event.mapper.EarlyWarningMapper">
+	
+	<!--预警事件列表  -->
+	<select id="getEvent" resultType="map">
+		SELECT
+			DATE_FORMAT(
+				em.create_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS warningTime,
+			em.early_type AS earlyType,
+			em.address,
+			em.version,
+			CONCAT(em.accuracy, '%') AS accuracy,
+			em.`status`,
+			em.scene_type AS sceneType,
+			em.uuid,
+			pe.pname AS disPerson,
+			DATE_FORMAT(
+				em.dis_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS disTime,
+			em.white,
+			DATE_FORMAT(
+				em.reset_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS resetTime,
+			pr.pname AS personPatrol,
+			em.description AS description,
+			em.longitude,
+			em.latitude,
+			em.point_id,
+			em.path_id,
+			em.dis_person AS personId,
+			em.warning_id AS warningId,
+			IFNULL(p1.pname, p2.pname) AS flyName,
+			IFNULL(p1.uuid, p2.uuid) AS flyPersonId,
+			IFNULL(u1.ename, u2.ename) AS uavName,
+			IFNULL(
+				CONCAT(
+					rg. NAME,
+					'-区域',
+					fa. CODE,
+					'-',
+					bsda.fieldname
+				),
+				CONCAT(fpt. NAME, '-', rt.route_name)
+			) AS lineInfo
+		FROM
+			p_event_main em
+		LEFT JOIN p_scene s ON s.`code` = em.scene_type
+		LEFT JOIN p_scene e ON e.parent_id = s.uuid
+		AND e. CODE = em.early_type
+		LEFT JOIN cle_person pe ON pe.uuid = em.dis_person
+		LEFT JOIN cle_person pr ON pr.uuid = em.peron_patrol
+		LEFT JOIN p_fly_path fp ON em.path_id = fp.uuid
+		LEFT JOIN p_fly_area fa ON fa.uuid = fp.area_id
+		LEFT JOIN p_range rg ON rg.uuid = fa.rang_id
+		LEFT JOIN cb_basedata bsda ON bsda.typecode = 'flyPathType'
+		AND bsda.data_status = '1'
+		AND bsda.fieldcode = fp.path_type
+		AND e.`code` = em.early_type
+		LEFT JOIN p_fixed_fly_point ffp ON em.point_id = ffp.uuid
+		LEFT JOIN p_fixed_point fpt ON ffp.fixed_id = fpt.uuid
+		LEFT JOIN p_route_point rp ON rp.data_status = '1'
+		AND rp.point_id = fpt.uuid
+		LEFT JOIN p_route rt ON rt.uuid = rp.route_id
+		LEFT JOIN cle_dept d ON d.uuid = em.dept_id
+		LEFT JOIN p_dispatch_detail_path pa ON pa.uuid = em.task_id
+		LEFT JOIN p_dispatch_detail dd ON dd.uuid = pa.dspdt_id
+		LEFT JOIN p_uav_dispatch ud ON ud.uuid = dd.uav_dsp_id
+		LEFT JOIN cle_person p1 ON p1.uuid = ud.fly_person
+		LEFT JOIN cle_uav u1 ON u1.uuid = ud.uav_id
+		LEFT JOIN p_dispatch_detail_route ddr ON ddr.uuid = em.task_id
+		LEFT JOIN p_dispatch_detail dds ON dds.uuid = ddr.dspdt_id
+		LEFT JOIN p_uav_dispatch uds ON uds.uuid = dds.uav_dsp_id
+		LEFT JOIN cle_person p2 ON p2.uuid = uds.fly_person
+
+		LEFT JOIN cle_uav u2 ON u2.uuid = uds.uav_id
+
+		<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if>
+		<if test="p.domainId != null and p.domainId != ''">
+			LEFT join p_scene s1 on s1.uuid=#{p.domainId}
+		</if>
+		<if test="p.sceneId != null and p.sceneId != ''">
+			LEFT join p_scene s2 on s2.uuid=#{p.sceneId}
+		</if>
+		WHERE
+			em.data_status = '1'
+		AND s.data_status = '1'
+		AND e.data_status = '1'
+		AND IFNULL(
+			CONCAT(
+				rg. NAME,
+				'-区域',
+				fa. CODE,
+				'-',
+				bsda.fieldname
+			),
+			CONCAT(fpt. NAME, '-', rt.route_name)
+		) LIKE '%-%'
+		<if test="p.deptId != null and p.deptId != ''">
+          AND d.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+		<if test="p.userId != null and p.userId != ''">
+			And em.dis_person = #{p.userId}
+		</if>
+		<if test="p.start != null and p.start != ''">
+			and DATE_FORMAT(em.create_time, '%Y-%m-%d') &gt;= #{p.start}
+		</if>
+		<if test="p.end != null and p.end != ''">
+			and DATE_FORMAT(em.create_time, '%Y-%m-%d') &lt;= #{p.end}
+		</if>
+		<if test="p.acStart != null and p.acStart != ''">
+			and em.accuracy &gt;= #{p.acStart}
+		</if>
+		<if test="p.acEnd != null and p.acEnd != ''">
+			and em.accuracy &lt;= #{p.acEnd}
+		</if>
+		<if test="p.bus_type != null and p.bus_type !=''">
+			and em.`status` in
+			<foreach collection="p.bus_type" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.scene != null and p.scene !=''">
+			and e.uuid in
+			<foreach collection="p.scene" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.domain != null and p.domain !=''">
+			and s.uuid in
+			<foreach collection="p.domain" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.earlyType != null and p.earlyType != ''">
+			and em.early_type = #{p.earlyType}
+		</if>
+		<if test="p.domainId != null and p.domainId != ''">
+			and em.scene_type=s1.code
+		</if>
+		<if test="p.sceneId != null and p.sceneId != ''">
+			and em.early_type = s2.code
+		</if>
+		<if test="p.lineInfo != null and p.lineInfo != ''">
+			and IFNULL(
+				CONCAT( rg.NAME, '-区域', fa.CODE, '-', bsda.fieldname ),
+				CONCAT( fpt.NAME, '-', rt.route_name ) 	
+				) like CONCAT('%',#{p.lineInfo},'%')
+		</if>
+		
+		<if test="p.uavName != null and p.uavName != ''">
+			and IFNULL(u1.ename, u2.ename) like CONCAT('%',#{p.uavName},'%')
+		</if>
+		<if test="p.flyPersonId != null and p.flyPersonId != ''">
+			and IFNULL(p1.uuid, p2.uuid) = #{p.flyPersonId}
+		</if>
+		ORDER BY
+			em.`status` ASC,
+			em.create_time DESC
+
+	</select>
+
+	<select id="getEvent2" resultType="map">
+		SELECT
+			SUM(1) AS earlyCount,
+			em.early_type AS earlyType,
+			em.address,
+			em.`status`,
+			em.scene_type AS sceneType,
+			em.longitude,
+			em.latitude
+		FROM
+		p_event_main em
+		LEFT JOIN
+		cle_person pe
+		ON pe.uuid = em.dis_person
+		LEFT JOIN
+		cle_person pr
+		ON pr.uuid = em.peron_patrol
+		WHERE
+		em.data_status = 1
+		<if test="p.earlyType != null and p.earlyType != ''">
+			and em.early_type = #{p.earlyType}
+		</if>
+		GROUP BY earlyType,em.address,em.`status`,sceneType,em.longitude,
+		em.latitude
+	</select>
+
+	<select id="getDispath" resultType="map">
+		SELECT
+			DATE_FORMAT(
+				em.create_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS warningTime,
+			em.early_type AS earlyType,
+			em.address,
+			em.version,
+			CONCAT(em.accuracy, '%') AS accuracy,
+			em.`status`,
+			em.scene_type AS sceneType,
+			em.uuid,
+			pe.pname AS disPerson,
+			DATE_FORMAT(
+				em.dis_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS disTime,
+			em.white,
+			DATE_FORMAT(
+				em.reset_time,
+				'%Y-%m-%d %H:%i:%s'
+			) AS resetTime,
+			pr.pname AS personPatrol,
+			em.description AS description,
+			em.longitude,
+			em.latitude,
+			em.point_id,
+			em.path_id,
+			em.warning_id as warningId
+		FROM
+			p_event_main em
+		LEFT JOIN cle_person pe ON pe.uuid = em.dis_person
+		LEFT JOIN cle_person pr ON pr.uuid = em.peron_patrol
+		left join cle_dept d  on d.uuid = em.dept_id
+		<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if>
+		WHERE
+			em.data_status = 1
+		<if test="p.deptId != null and p.deptId != ''">
+          AND d.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+		<if test="p.userId != null and p.userId != ''">
+			And em.dis_person = #{p.userId}
+		</if>
+		<if test="p.status != null and p.status != ''">
+			And em.`status` = #{p.status}
+		</if>
+		ORDER BY
+		em.create_time DESC
+		LIMIT 1
+	</select>
+
+
+	<select id="getEarlyInfoBar" resultType="map">
+		select d.dname ,count(e.dept_id) from cle_dept d left join
+		p_event_main e on d.uuid = e.dept_id and e.early_type=#{p.earlyType} where
+		d.parent_id = '8ff207f2698311e9881d0242ac110005' and d.dname like '%区'
+		group by d.dname
+	</select>
+	
+	<select id="getDeptName" resultType="map">
+		select d.dname  from cle_dept d  where
+		d.parent_id = '8ff207f2698311e9881d0242ac110005' and d.dname like '%区'
+	</select>
+</mapper>

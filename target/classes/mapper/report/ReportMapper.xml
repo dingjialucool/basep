@@ -1,0 +1,487 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.report.mapper.ReportMapper">
+
+	<resultMap type="com.chinobot.plep.home.report.entity.vo.RouteLineOfCheckPointVo" id="RouteLineOfCheckPointMap">
+		<id column="check_point_id" property="uuid"/>
+		<result column="name" property="checkPointName"/>
+		<result column="longitude" property="longitude"/>
+		<result column="latitude" property="latitude"/>
+		<collection property="routeLines" ofType="com.chinobot.plep.home.report.entity.vo.RouteLineVo" >
+			<id column="route_id" property="uuid"/>
+			<collection property="pointList" ofType="com.chinobot.plep.home.report.entity.dto.PointDTO" >
+				<id column="pointId" property="pointId"/>
+				<result column="pointName" property="pointName"/>
+				<result column="center" property="center"/>
+			</collection>
+		</collection>
+	</resultMap>
+	
+	<resultMap type="com.chinobot.plep.home.report.entity.vo.WarnImgVo" id="warnImgMap">
+		<id column="uuid" property="uuid"/>
+		<result column="name" property="pointName"/>
+		<collection property="flyPointsVo" ofType="com.chinobot.plep.home.report.entity.vo.FlyPointsVo" >
+			<result column="module" property="module"/>
+			<result column="file_id" property="fileId"/>
+			<result column="warnTime" property="warnTime"/>
+		</collection>
+	</resultMap>
+
+
+	<select id="getAllReports" resultType="com.chinobot.plep.home.report.entity.vo.ReportVo">
+		
+		SELECT
+			de.dname AS area,
+			re.area_id AS areaId,
+			re.frequency,
+			re.type,
+			re.cycle,
+			re.uuid,
+			re.years,
+			re.create_time AS reportTime,
+			re.start_time AS startTime,
+			re.end_time AS endTime
+		FROM
+			p_report re
+		LEFT JOIN cle_dept de ON re.area_id = de.uuid
+		<if test="p.deptId != null and p.deptId != ''">
+			left join cle_dept d2 on d2.uuid=#{p.deptId}
+		</if>
+		WHERE
+			re.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+          AND de.dept_code like CONCAT(d2.dept_code,'%')
+        </if>
+        <if test="p.start != null and p.start != ''">
+			and DATE_FORMAT(re.create_time, '%Y-%m-%d') &gt;= #{p.start}
+		</if>
+		<if test="p.end != null and p.end != ''">
+			and DATE_FORMAT(re.create_time, '%Y-%m-%d') &lt;= #{p.end}
+		</if>
+		<if test="p.deptName != null and p.deptName != ''">
+			and  de.dname like CONCAT('%',#{p.deptName},'%')
+		</if>
+		<if test="p.type != null and p.type !=''">
+			and re.type in
+			<foreach collection="p.type" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		<if test="p.frequency != null and p.frequency !=''">
+			and re.frequency in
+			<foreach collection="p.frequency" item="type" index="index"
+				open="(" close=")" separator=",">
+				#{type}
+			</foreach>
+		</if>
+		order by re.create_time desc
+	</select>
+
+    <select id="getChart" resultType="java.util.Map">
+		SELECT
+		a.uuid,
+		a.num,
+		(a.num - IFNULL( b.yoy, 0 )) as yoy,
+		(a.num - IFNULL( c.mom, 0 )) as mom,
+        r.frequency,
+		d.dname
+		FROM
+		(
+		SELECT
+		r.uuid,
+		count( fp.uuid ) AS num
+		FROM
+		p_report r
+		LEFT JOIN p_fixed_point fp ON r.area_id = fp.dept_id
+		AND r.data_status = "1"
+		AND fp.data_status = "1"
+		WHERE
+		<if test="uuid != null and uuid != ''">
+			r.uuid = #{uuid}
+		</if>
+		AND
+		CASE
+		r.frequency
+		WHEN "2" THEN
+		CONCAT( r.years, r.cycle ) = CONCAT(YEAR(fp.create_time), WEEK(fp.create_time, 1))
+		WHEN "3" THEN
+		CONCAT( r.years, r.cycle ) = CONCAT(YEAR(fp.create_time), MONTH(fp.create_time))
+		WHEN "4" THEN
+		CONCAT( r.years, r.cycle ) = CONCAT(YEAR(fp.create_time), QUARTER(fp.create_time))
+		WHEN "5" THEN
+		r.years = YEAR(fp.create_time)
+		END
+		GROUP BY
+		r.uuid,
+		r.area_id
+		) a
+		LEFT JOIN (
+		SELECT
+		r.uuid,
+		count( fp.uuid ) AS yoy
+		FROM
+		p_report r
+		LEFT JOIN p_fixed_point fp ON r.area_id = fp.dept_id
+		AND r.data_status = "1"
+		AND fp.data_status = "1"
+		WHERE
+		<if test="uuid != null and uuid != ''">
+			r.uuid = #{uuid}
+		</if>
+		AND
+		CASE
+		r.frequency
+		WHEN "2" THEN
+		CONCAT( r.years - 1, r.cycle ) =
+		CONCAT(YEAR(fp.create_time), WEEK(fp.create_time, 1))
+		WHEN "3" THEN
+		CONCAT( r.years - 1, r.cycle ) =
+		CONCAT(YEAR(fp.create_time), MONTH(fp.create_time))
+		WHEN "4" THEN
+		CONCAT( r.years - 1, r.cycle ) =
+		CONCAT(YEAR(fp.create_time), QUARTER(fp.create_time))
+		WHEN "5" THEN
+		r.years - 1 = YEAR(fp.create_time)
+		END
+		GROUP BY
+		r.uuid,
+		r.area_id
+		) b ON a.uuid = b.uuid
+		LEFT JOIN (
+		SELECT
+		r.uuid,
+		count( fp.uuid ) AS mom
+		FROM
+		p_report r
+		LEFT JOIN p_fixed_point fp ON r.area_id = fp.dept_id
+		AND r.data_status = "1"
+		AND fp.data_status = "1"
+		WHERE
+		<if test="uuid != null and uuid != ''">
+			r.uuid = #{uuid}
+		</if>
+		AND
+		CASE
+		r.frequency
+		WHEN "2" THEN
+		CONCAT( IF(r.cycle - 1 &lt;&gt; 0, r.years, r.years - 1), IF(r.cycle - 1 &lt;&gt; 0, r.cycle - 1, 52) ) =
+		CONCAT(YEAR(fp.create_time), WEEK(fp.create_time, 1))
+		WHEN "3" THEN
+		CONCAT( IF(r.cycle - 1 &lt;&gt; 0, r.years, r.years - 1), IF(r.cycle - 1 &lt;&gt; 0, r.cycle - 1, 12) ) =
+		CONCAT(YEAR(fp.create_time), MONTH(fp.create_time))
+		WHEN "4" THEN
+		CONCAT( IF(r.cycle - 1 &lt;&gt; 0, r.years, r.years - 1), IF(r.cycle - 1 &lt;&gt; 0, r.cycle - 1, 4) ) =
+		CONCAT(YEAR(fp.create_time), QUARTER(fp.create_time))
+		WHEN "5" THEN
+		1 = 2
+		END
+		GROUP BY
+		r.uuid,
+		r.area_id
+		) c ON a.uuid = c.uuid
+        LEFT JOIN p_report r ON a.uuid = r.uuid
+        LEFT JOIN cle_dept d ON r.area_id = d.uuid;
+	</select>
+	
+	<select id="getRouteLineOfCheckPoint" resultMap="RouteLineOfCheckPointMap">
+		
+		SELECT
+			r.route_name,
+			rp.route_id,
+			r.check_point_id,
+			cp. NAME,
+			cp.longitude,
+			cp.latitude,
+			fp.`name` AS pointName,
+			fp.uuid AS pointId,
+			fp.center AS center
+		FROM
+			p_route r
+		LEFT JOIN p_route_point rp ON rp.route_id = r.uuid
+		LEFT JOIN p_fixed_point fp ON fp.uuid = rp.point_id
+		LEFT JOIN p_check_point cp ON r.check_point_id = cp.uuid
+		WHERE
+			r.data_status = '1'
+		AND rp.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+          and cp.dept_id = #{p.deptId}
+     	</if>
+        and DATE_FORMAT(cp.create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+		ORDER BY
+			cp.create_time,
+			rp.route_id,
+			rp.sort
+			
+	</select>
+	
+	<select id="getRouteNum" resultType="map">
+		SELECT
+			COUNT(uuid) AS routeNum,
+			IFNULL(
+				ROUND(
+					sum(fly_time * fly_speed * 60) / 1000
+				),
+				0
+			) AS flightTotal
+		FROM
+			p_route
+		WHERE
+			data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+          and dept_id = #{p.deptId}
+     	</if>
+     	<if test="p.startTime != null">
+          and DATE_FORMAT(create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+     	</if>
+        and DATE_FORMAT(create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+	</select>
+	
+	<select id="getFlyNum" resultType="long">
+		SELECT
+			COUNT(pr.uuid)
+		FROM
+			p_route r
+		LEFT JOIN p_dispatch_detail_route pr ON pr.route_id = r.uuid
+		WHERE
+			r.data_status = '1'
+		AND pr.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+          and r.dept_id = #{p.deptId}
+     	</if>
+     	<if test="p.status != null and p.status != ''">
+          and pr.status = #{p.status}
+     	</if>
+     	and DATE_FORMAT(r.create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+        and DATE_FORMAT(r.create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+        and DATE_FORMAT(pr.create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+        and DATE_FORMAT(pr.create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+	</select>
+	
+	<select id="getWarnNum" resultType="long">
+		SELECT
+			COUNT(uuid)
+		FROM
+			p_event_main
+		WHERE
+			data_status = '1' 
+			AND scene_type = '01'
+			AND early_type = '01'
+		<if test="p.deptId != null and p.deptId != ''">
+          and dept_id = #{p.deptId}
+     	</if>
+     	and DATE_FORMAT(create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+        and DATE_FORMAT(create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+	</select>
+	
+	<select id="getWarnImg" resultMap="warnImgMap">
+		
+		SELECT
+			s.uuid,
+			s.`name`,
+			s.module,
+			s.file_id,
+			s.flyPointId,
+			s.create_time,
+			s.dept_id,
+			s.warnTime
+		FROM
+			(
+				SELECT
+					fb.module,
+					fb.file_id,
+					fb.create_time AS warnTime,
+					ffp.uuid AS flyPointId,
+					po.uuid,
+					po.`name`,
+					em.create_time,
+					em.dept_id
+				FROM
+					p_event_main em
+				LEFT JOIN p_fixed_fly_point ffp ON ffp.uuid = em.point_id
+				LEFT JOIN p_fixed_point po ON ffp.fixed_id = po.uuid
+				LEFT JOIN cb_file_bus fb ON fb.bus_id = em.uuid
+				WHERE
+					po.data_status = '1'
+				AND ffp.data_status = '1'
+				AND fb.module = 'event_img'
+				AND em.data_status = '1'
+				AND fb.data_status = '1'
+		UNION
+			SELECT
+				IFNULL(fb.module, fbs.module) AS module,
+				IFNULL(fb.file_id, fbs.file_id) AS file_id,
+				IFNULL(
+					fb.create_time,
+					fbs.create_time
+				) AS warnTime,
+				ffp.uuid,
+				po.uuid,
+				po.`name`,
+				em.create_time,
+				em.dept_id
+			FROM
+				p_event_main em
+			LEFT JOIN p_fixed_fly_point ffp ON ffp.uuid = em.point_id
+			LEFT JOIN p_fixed_point po ON ffp.fixed_id = po.uuid
+			LEFT JOIN cb_file_bus fb ON fb.bus_id = em.warning_id
+			LEFT JOIN cb_file_bus fbs ON fbs.bus_id = ffp.uuid
+			WHERE
+				po.data_status = '1'
+			AND ffp.data_status = '1'
+			AND fb.module = 'basic_img'
+			AND em.data_status = '1'
+			AND fb.data_status = '1'
+	) s
+		WHERE 1 = 1
+		<if test="p.deptId != null and p.deptId != ''">
+          and s.dept_id = #{p.deptId}
+     	</if>
+     	and DATE_FORMAT(s.create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+        and DATE_FORMAT(s.create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+        ORDER BY
+			s.warnTime DESC,
+			s.flyPointId,
+			s.module
+	
+	</select>
+	
+	<select id="getWarnImgOfPage" resultType="com.chinobot.plep.home.report.entity.vo.FlyPointsVo">
+		
+		SELECT
+			s.uuid,
+			s.`name`,
+			s.module,
+			s.file_id,
+			s.flyPointId,
+			s.create_time,
+			s.dept_id,
+			s.poTime
+		FROM
+			(
+				SELECT
+					fb.module,
+					fb.file_id,
+					ffp.uuid AS flyPointId,
+					po.uuid,
+					po.`name`,
+					em.create_time,
+					em.dept_id,
+					po.create_time AS poTime
+				FROM
+					p_event_main em
+				LEFT JOIN p_fixed_fly_point ffp ON ffp.uuid = em.point_id
+				LEFT JOIN p_fixed_point po ON ffp.fixed_id = po.uuid
+				LEFT JOIN cb_file_bus fb ON fb.bus_id = em.uuid
+				WHERE
+					po.data_status = '1'
+				AND ffp.data_status = '1'
+				AND fb.module = 'event_img'
+				AND em.data_status = '1'
+				AND fb.data_status = '1'
+				UNION
+					SELECT
+						fb.module,
+						fb.file_id,
+						ffp.uuid,
+						po.uuid,
+						po.`name`,
+						em.create_time,
+						em.dept_id,
+						po.create_time AS poTime
+					FROM
+						p_event_main em
+					LEFT JOIN p_fixed_fly_point ffp ON ffp.uuid = em.point_id
+					LEFT JOIN p_fixed_point po ON ffp.fixed_id = po.uuid
+					LEFT JOIN cb_file_bus fb ON fb.bus_id = ffp.uuid
+					WHERE
+						po.data_status = '1'
+					AND ffp.data_status = '1'
+					AND fb.module = 'basic_img'
+					AND em.data_status = '1'
+					AND fb.data_status = '1'
+			) s
+		WHERE 1 = 1
+		<if test="p.deptId != null and p.deptId != ''">
+          and s.dept_id = #{p.deptId}
+     	</if>
+     	<if test="p.pointId != null and p.pointId != ''">
+          and s.uuid = #{p.pointId}
+     	</if>
+     	and DATE_FORMAT(s.create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+        and DATE_FORMAT(s.create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+		ORDER BY
+			s.poTime DESC,
+			s.create_time DESC,
+			s.flyPointId,
+			s.module
+	
+	</select>
+	
+	<select id="getFixedPointOfTime" resultType="com.chinobot.plep.home.report.entity.dto.FixedPointOfTimeDTO">
+		SELECT
+			po.uuid AS pointId,
+			po.`name` AS pointName
+		FROM
+			p_fixed_point po
+		LEFT JOIN p_fixed_fly_point ffp ON ffp.fixed_id = po.uuid
+		LEFT JOIN cb_file_bus fb ON ffp.uuid = fb.bus_id
+		WHERE
+			po.data_status = '1'
+		AND ffp.data_status = '1'
+		AND fb.data_status = '1'
+		AND fb.module = 'fly_img'
+		<if test="p.deptId != null and p.deptId != ''">
+          and po.dept_id = #{p.deptId}
+     	</if>
+     	and DATE_FORMAT(fb.create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+        and DATE_FORMAT(fb.create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+		GROUP BY
+			po.uuid,
+			po.`name`
+		ORDER BY
+			po.create_time DESC
+	
+	</select>
+	
+	<select id="getFlyImg" resultType="map">
+		SELECT
+			fb.module,
+			fb.file_id,
+			DATE_FORMAT(fb.create_time, '%Y-%m-%d') as flyTime
+		FROM
+			p_fixed_point po
+		LEFT JOIN p_fixed_fly_point ffp ON ffp.fixed_id = po.uuid
+		LEFT JOIN cb_file_bus fb ON ffp.uuid = fb.bus_id
+		WHERE
+			po.data_status = '1'
+		AND ffp.data_status = '1'
+		AND fb.data_status = '1'
+		AND fb.module = 'fly_img'
+		<if test="p.deptId != null and p.deptId != ''">
+          and po.dept_id = #{p.deptId}
+     	</if>
+     	and DATE_FORMAT(fb.create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+        and DATE_FORMAT(fb.create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+		AND po.uuid = #{p.pointId}
+		ORDER BY
+			fb.create_time DESC
+	
+	</select>
+	
+	<select id="getChartByCustomizeWay" resultType="long">
+		SELECT
+			COUNT(po.uuid) AS num
+		FROM
+			p_fixed_point po
+		WHERE
+			po.data_status = '1'
+		<if test="p.deptId != null and p.deptId != ''">
+          and po.dept_id = #{p.deptId}
+     	</if>
+     	<if test="p.startTime != null ">
+          and DATE_FORMAT(po.create_time, '%Y-%m-%d') &gt;= #{p.startTime}
+     	</if>
+        and DATE_FORMAT(po.create_time, '%Y-%m-%d') &lt;= #{p.endTime}
+	</select>
+</mapper>

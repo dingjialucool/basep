@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.cityle.base.mapper.SceneMapper">
+    <resultMap type="com.chinobot.cityle.base.entity.vo.VoAddressBase" id="voAddressBaseResultMap">
+        <association property="entity" javaType="map">
+            <id column="uuid" property="uuid"/>
+            <result column="grid_id" property="gridId"/>
+            <result column="ab_id" property="abId"/>
+            <result column="stype" property="stype"/>
+            <result column="bus_type" property="busType"/>
+            <result column="sname" property="sname"/>
+            <result column="address" property="address"/>
+            <result column="data_status" property="dataStatus"/>
+            <result column="imp" property="imp"/>
+            <result column="fileId" property="fileId"/>
+            <result column="path" property="path"/>
+        </association>
+        <association property="addressBase" resultMap="com.chinobot.framework.web.mapper.IBaseMapper.addressBaseResultMap">
+        </association>
+    </resultMap>
+
+    <select id="getSenceImpList" resultType="com.chinobot.cityle.base.entity.Scene">
+        SELECT t1.*
+        FROM cle_scene t1, cle_strategy t2
+        WHERE 1=1 and t1.uuid=t2.ref_silence
+        <if test="param.imps != null and param.imps !=''">
+            and t2.imp = #{param.imps}
+        </if>
+        <if test="param.sname != null and param.sname !=''">
+            and t1.sname like CONCAT(CONCAT('%',#{param.sname}),'%')
+        </if>
+        <if test="param.address != null and param.address !=''">
+            and t1.address like CONCAT(CONCAT('%',#{param.address}),'%')
+        </if>
+
+        <if test="param.stype != null and param.stype !=''">
+            and t2.stype = #{param.stype}
+        </if>
+        <if test="param.busType != null and param.busType !=''">
+            and t2.bus_type = #{param.busType}
+        </if>
+
+
+        <!--<if test="param.viewName != null and param.viewName !=''">-->
+        <!--and t2.sname like CONCAT(CONCAT('%',#{param.viewName}),'%')-->
+        <!--</if>-->
+        <!--<if test="param.status != null and param.status !=''">-->
+        <!--and t1.task_status = #{param.status}-->
+        <!--</if>-->
+        <!--<if test="param.sceneType != null and param.sceneType !=''">-->
+        <!--and t2.stype = #{param.sceneType}-->
+        <!--</if>-->
+        <!--<if test="param.busType != null and param.busType !=''">-->
+        <!--and t2.bus_type = #{param.busType}-->
+        <!--</if>-->
+        <!--<if test="param.start != null and param.start !=''">-->
+        <!--and t1.create_time &gt;= #{param.start}-->
+        <!--</if>-->
+        <!--<if test="param.end != null and param.end !=''">-->
+        <!--and t1.create_time &lt;= #{param.end}-->
+        <!--</if>-->
+        <!--<if test="param.start2 != null and param.start2 !=''">-->
+        <!--and t1.xc_time &gt;= #{param.start2}-->
+        <!--</if>-->
+        <if test="param.end2 != null and param.end2 !=''">
+        and t1.xc_time &lt;= #{param.end2}
+        </if>
+        <!--<if test="param.prop != null and param.prop !=''">-->
+        <!--order by #{param.prop} #{param.order}-->
+        <!--</if>-->
+        
+        ORDER BY t1.create_time DESC
+    </select>
+    
+    <select id="getSceneAddr" resultMap="voAddressBaseResultMap">
+        SELECT
+		  s.*,
+          f.uuid AS fileId,
+          f.path,
+		  ab.uuid AS ab_uuid,
+		  ab.atype AS ab_atype,
+		  ab.province AS ab_province,
+		  ab.city AS ab_city,
+		  ab.district AS ab_district,
+		  ab.street AS ab_street,
+		  ab.address AS ab_address,
+		  ab.center AS ab_center,
+		  ab.polyline AS ab_polyline,
+		  ab.data_status AS ab_data_status
+		FROM
+		  cle_scene s
+		  LEFT JOIN cle_address_base ab
+		    ON s.ab_id = ab.uuid
+	       AND ab.data_status = '1'
+          LEFT JOIN
+            (SELECT
+              uf.uuid,
+              uf.path,
+              fb.bus_id
+            FROM
+              cb_upload_file uf
+              LEFT JOIN cb_file_bus fb
+                ON uf.uuid = fb.file_id
+            WHERE fb.sort = '1'
+              AND fb.module = 'scene_album') f
+            ON f.bus_id = s.uuid
+		WHERE 1 = 1
+		<if test="p.dataStatus != null and p.dataStatus != ''">
+		  AND s.data_status = #{p.dataStatus}
+		</if>
+		<if test="p.uuid != null and p.uuid != ''">
+		  AND s.uuid = #{p.uuid}
+		</if>
+        <if test="p.gridId != null and p.gridId != ''">
+          AND s.grid_id = #{p.gridId}
+        </if>
+        <if test="p.sname != null and p.sname != ''">
+          AND s.sname like CONCAT('%', #{p.sname}, '%')
+        </if>
+        ORDER BY s.create_time DESC
+    </select>
+    
+    <select id="getEditGridScene" resultType="map">
+        SELECT
+          s.uuid,
+          s.grid_id as gridId,
+          ab.center
+        FROM
+          cle_scene s
+          LEFT JOIN cle_address_base ab
+            ON s.ab_id = ab.uuid
+            AND ab.data_status = '1'
+        WHERE IFNULL(s.grid_id, 0) = 0
+          AND IFNULL(ab.center, 0) = ab.center
+          AND s.data_status = '1'
+        <if test="gridId != null and gridId != ''">
+        UNION ALL
+
+        SELECT
+          s.uuid,
+          s.grid_id as gridId,
+          ab.center
+        FROM
+          cle_scene s
+          LEFT JOIN cle_address_base ab
+            ON s.ab_id = ab.uuid
+            AND ab.data_status = '1'
+        WHERE s.grid_id = #{gridId}
+          AND s.data_status = '1'
+        </if>
+    </select>
+    
+    <select id="getHomeStatisticsData" resultType="java.util.LinkedHashMap">
+		SELECT
+		  a.uavCount,
+		  CASE
+		    WHEN a.uavCount &gt; a2.uavCount
+		    THEN 'up'
+		    WHEN a.uavCount &lt; a2.uavCount
+		    THEN 'down'
+		    WHEN a.uavCount = a2.uavCount
+		    THEN 'equal'
+		  END AS uavStatus,
+		  b.buildCount,
+		  CASE
+		    WHEN b.buildCount &gt; b2.buildCount
+		    THEN 'up'
+		    WHEN b.buildCount &lt; b2.buildCount
+		    THEN 'down'
+		    WHEN b.buildCount = b2.buildCount
+		    THEN 'equal'
+		  END AS buildStatus,
+		  c.constructionCount,
+		  CASE
+		    WHEN c.constructionCount &gt; c2.constructionCount
+		    THEN 'up'
+		    WHEN c.constructionCount &lt; c2.constructionCount
+		    THEN 'down'
+		    WHEN c.constructionCount = c2.constructionCount
+		    THEN 'equal'
+		  END AS constructionStatus,
+		  d.ecologyCount,
+		  d.reservoirCount,
+		  d.overheadLineCount,
+		  e.sceneCount,
+		  f.earlyWarningCount,
+		  g.gridCount,
+		  h.personCount
+		FROM
+		  (SELECT
+		    COUNT(u.uuid) AS uavCount
+		  FROM
+		    cle_uav u
+		  WHERE u.data_status = '1') a,
+		  (SELECT
+		    COUNT(u.uuid) AS uavCount
+		  FROM
+		    cle_uav u
+		  WHERE (
+		      u.data_status = '1'
+		      OR (
+		        u.data_status = '0'
+		        AND YEAR(u.operate_time) &gt; YEAR(CURDATE()) - 1
+		      )
+		    )
+		    AND YEAR(u.create_time) &lt; YEAR(CURDATE())) a2,
+		  (SELECT
+		    COUNT(DISTINCT ewr.ab_id) AS buildCount
+		  FROM
+		    cle_early_warning_record ewr
+		  WHERE wtype = '01'
+		    AND ewr.data_status = '1') b,
+		  (SELECT
+		    COUNT(DISTINCT ewr.ab_id) AS buildCount
+		  FROM
+		    cle_early_warning_record ewr
+		  WHERE wtype = '01'
+		    AND (
+		      ewr.data_status = '1'
+		      OR (
+		        ewr.data_status = '0'
+		        AND YEAR(ewr.operate_time) &gt; YEAR(CURDATE()) - 1
+		      )
+		    )
+		    AND YEAR(ewr.warning_time) &lt; YEAR(CURDATE())) b2,
+		  (SELECT
+		    COUNT(s.uuid) AS constructionCount
+		  FROM
+		    cle_scene s
+		  WHERE s.stype = '0101'
+		    AND s.data_status = '1') c,
+		  (SELECT
+		    COUNT(s.uuid) AS constructionCount
+		  FROM
+		    cle_scene s
+		  WHERE s.stype = '0101'
+		    AND (
+		      s.data_status = '1'
+		      OR (
+		        s.data_status = '0'
+		        AND YEAR(s.operate_time) &gt; YEAR(CURDATE()) - 1
+		      )
+		    )
+		    AND YEAR(s.create_time) &lt; YEAR(CURDATE())) c2,
+		  (SELECT
+		    MAX(x.ecologyCount) AS ecologyCount,
+		    MAX(x.reservoirCount) AS reservoirCount,
+		    MAX(x.overheadLineCount) AS overheadLineCount
+		  FROM
+		    (SELECT
+		      s.stype,
+		      CASE
+		        s.stype
+		        WHEN '0201'
+		        THEN COUNT(s.uuid)
+		        ELSE 0
+		      END AS ecologyCount,
+		      CASE
+		        s.stype
+		        WHEN '0202'
+		        THEN COUNT(s.uuid)
+		        ELSE 0
+		      END AS reservoirCount,
+		      CASE
+		        s.stype
+		        WHEN '0601'
+		        THEN COUNT(s.uuid)
+		        ELSE 0
+		      END AS overheadLineCount
+		    FROM
+		      cle_scene s
+		    WHERE s.data_status = '1'
+		    GROUP BY s.stype) x) d,
+		  (SELECT
+		    COUNT(s.uuid) AS sceneCount
+		  FROM
+		    cle_scene s
+		  WHERE s.data_status = '1') e,
+		  (SELECT
+		    COUNT(ewr.uuid) AS earlyWarningCount
+		  FROM
+		    cle_early_warning_record ewr
+		  WHERE ewr.data_status = '1') f,
+		  (SELECT
+		    COUNT(g.uuid) AS gridCount
+		  FROM
+		    cle_grid g
+		  WHERE g.data_status = '1') g,
+		  (SELECT
+		    COUNT(p.uuid) AS personCount
+		  FROM
+		    cle_person p
+		  WHERE p.data_status = '1'
+		  AND p.pname &lt;&gt; '系统管理员'
+		  AND p.duties &lt;&gt; '系统管理员') h
+    </select>
+</mapper>

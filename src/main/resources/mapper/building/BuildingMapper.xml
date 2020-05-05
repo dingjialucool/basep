@@ -1,0 +1,348 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper
+	namespace="com.chinobot.plep.home.building.mapper.BuildingMapper">
+	<resultMap
+		type="com.chinobot.cityle.base.entity.vo.VoAddressBase"
+		id="voAddressBaseResultMap">
+		<association property="entity" javaType="map">
+			<id column="uuid" property="uuid" />
+			<result column="abs_id" property="absId" />
+			<result column="name" property="name" />
+			<result column="village_id" property="villageId" />
+			<result column="code" property="code" />
+			<result column="address" property="address" />
+			<result column="data_status" property="dataStatus" />
+			<result column="fileId" property="fileId" />
+			<result column="path" property="path" />
+			<result column="weiCount" property="sceneCount" />
+			<result column="yiCount" property="deptCount" />
+			<result column="allCount" property="allCount" />
+			<result column="warningTime" property="warningTime" />
+			<result column="illegal_type" property="illegalType" />
+			<result column="link_now" property="linkNow" />
+			<result column="status" property="status" />
+			<result column="warning_id" property="warningId" />
+		</association>
+		<association property="addressBase"
+			resultMap="com.chinobot.framework.web.mapper.IBaseMapper.addressBaseResultMap">
+		</association>
+	</resultMap>
+
+	<select id="getBuildingAddr" resultMap="voAddressBaseResultMap">
+	SELECT
+	DISTINCT b.*,
+		f.fileId,
+		f.path,
+		ab.uuid AS ab_uuid,
+		ab.atype AS ab_atype,
+		ab.province AS ab_province,
+		sc.weiCount,
+		mc.yiCount,
+		ac.allCount,
+		IFNULL( kc.waringTime, ks.waringTime) warningTime,
+		( SELECT `name` FROM cb_regions WHERE `code` = ab.province ) AS ab_province_name,
+		ab.city AS ab_city,
+		( SELECT `name` FROM cb_regions WHERE `code` = ab.city ) AS ab_city_name,
+		ab.district AS ab_district,
+		( SELECT `name` FROM cb_regions WHERE `code` = ab.district ) AS ab_district_name,
+		ab.street AS ab_street,
+		( SELECT `name` FROM cb_regions WHERE `code` = ab.street ) AS ab_street_name,
+		ab.address AS ab_address,
+		ab.center AS ab_center,
+		ab.polyline AS ab_polyline,
+		ab.data_status AS ab_data_status 
+	FROM
+		p_building b
+		LEFT JOIN cle_address_base ab ON b.abs_id = ab.uuid 
+		AND ab.data_status = '1' 
+			right join cle_dept_grid dg on dg.grid_id = b.uuid 
+		LEFT JOIN ( SELECT building_id, COUNT( 1 ) AS weiCount FROM p_event_main 
+					WHERE STATUS = '1' GROUP BY building_id ) sc ON sc.building_id = b.uuid
+		LEFT JOIN ( SELECT building_id, COUNT( 1 ) AS yiCount FROM p_event_main 
+					WHERE STATUS = '2' GROUP BY building_id ) mc ON mc.building_id = b.uuid
+		LEFT JOIN (SELECT pe.building_id, max( pw.create_time ) AS waringTime 
+					FROM p_event_main pe 
+					RIGHT JOIN p_early_warning pw ON pe.warning_id = pw.uuid 
+					GROUP BY pe.building_id 
+				) kc ON kc.building_id = b.uuid
+		LEFT JOIN (SELECT pe.building_id, max(pe.create_time ) AS waringTime 
+					FROM p_event_main pe 
+					GROUP BY pe.building_id 
+				) ks ON ks.building_id = b.uuid
+				left join p_event_main pe on pe.building_id = b.uuid 
+		LEFT JOIN ( SELECT building_id, COUNT( 1 ) AS allCount FROM p_event_main 
+					WHERE STATUS = '2' OR STATUS = '1' GROUP BY building_id ) ac ON ac.building_id = b.uuid
+		LEFT JOIN (SELECT uf.uuid AS fileId, uf.path, fb.bus_id 
+					FROM cb_upload_file uf
+					LEFT JOIN cb_file_bus fb ON uf.uuid = fb.file_id 
+					WHERE fb.sort = '1' AND fb.module = 'building_album' ) f ON f.bus_id = b.uuid 
+		WHERE
+		1 = 1
+		<if test="p.dataStatus != null and p.dataStatus != ''">
+			AND b.data_status = #{p.dataStatus}
+		</if>
+		<if test="p.deptId != null and p.deptId != ''">
+			AND dg.dept_id = #{p.deptId}
+		</if>
+		<if test="p.uuid != null and p.uuid != ''">
+			AND b.uuid = #{p.uuid}
+		</if>
+		<if test="p.name != null and p.name != ''">
+			AND b.name like CONCAT('%', #{p.name}, '%')
+		</if>
+		 order by warningTime is null,warningTime desc,ac.allCount is null ,ac.allCount desc 
+	</select>
+	<select id="getBuildingWeiAddr"
+		resultMap="voAddressBaseResultMap">
+		SELECT
+			b.*,
+			f.fileId,
+			f.path,
+			ab.uuid AS ab_uuid,
+			IFNULL( pw.create_time, pe.create_time) warningTime,
+			ab.address AS ab_address,
+			ab.center AS ab_center,
+			ab.polyline AS ab_polyline,
+			ab.data_status AS ab_data_status ,
+			IFNULL( GROUP_CONCAT( i2.name ), GROUP_CONCAT( i1.name ) ) illegal_type,
+			 pe.link_now ,
+			 pe.uuid as warning_id
+		FROM
+			p_building b
+			LEFT JOIN cle_address_base ab ON b.abs_id = ab.uuid 
+			AND ab.data_status = '1'
+			RIGHT JOIN p_event_main pe ON pe.building_id = b.uuid
+			LEFT JOIN p_early_warning pw ON pw.uuid = pe.warning_id 
+			LEFT JOIN (SELECT uf.uuid AS fileId, uf.path, fb.bus_id 
+					FROM cb_upload_file uf
+					LEFT JOIN cb_file_bus fb ON uf.uuid = fb.file_id 
+					 and RIGHT ( RTRIM( uf.origin_name ), LOCATE( '.', REVERSE( RTRIM( uf.origin_name ) ) ) - 1 ) IN ( 'BMP', 'bmp', 'JPG', 'jpg', 'JPEG', 'jpeg', 'PNG', 'png', 'GIF', 'gif' )
+					WHERE fb.sort = '1' AND fb.module = 'p_event_main' ) f ON f.bus_id = pw.uuid 
+			LEFT JOIN p_illegal i1 ON i1.uuid = pe.illegal_id 
+			LEFT JOIN p_illegal i2 ON i2.uuid = pe.illegal_id 
+			
+		WHERE
+			pe.STATUS = '1' 
+		<if test="p.dataStatus != null and p.dataStatus != ''">
+			AND b.data_status = #{p.dataStatus}
+		</if>
+		<if test="p.uuid != null and p.uuid != ''">
+			AND b.uuid = #{p.uuid}
+		</if>
+		<if test="p.name != null and p.name != ''">
+			AND b.name like CONCAT('%', #{p.name}, '%')
+		</if>
+		 group by b.uuid ,f.fileId,f.path,pw.create_time, pe.link_now ,pe.uuid ,pe.create_time 
+		  order by warningTime is null,warningTime desc
+	</select>
+	<select id="getBuildingYiAddr"
+		resultMap="voAddressBaseResultMap">
+		SELECT
+			b.*,
+			f.fileId,
+			f.path,
+			ab.uuid AS ab_uuid,
+			IFNULL( pw.create_time, pe.create_time) warningTime,
+			ab.address AS ab_address,
+			ab.center AS ab_center,
+			ab.polyline AS ab_polyline,
+			ab.data_status AS ab_data_status ,
+			IFNULL( GROUP_CONCAT( i2.name ), GROUP_CONCAT( i1.name ) ) illegal_type,
+			 pe.status ,
+			 pe.uuid as warning_id
+		FROM
+			p_building b
+			LEFT JOIN cle_address_base ab ON b.abs_id = ab.uuid 
+			AND ab.data_status = '1'
+			RIGHT JOIN p_event_main pe ON pe.building_id = b.uuid
+			LEFT JOIN p_early_warning pw ON pw.uuid = pe.warning_id 
+			LEFT JOIN (SELECT uf.uuid AS fileId, uf.path, fb.bus_id 
+					FROM cb_upload_file uf
+					LEFT JOIN cb_file_bus fb ON uf.uuid = fb.file_id 
+					 and RIGHT ( RTRIM( uf.origin_name ), LOCATE( '.', REVERSE( RTRIM( uf.origin_name ) ) ) - 1 ) IN ( 'BMP', 'bmp', 'JPG', 'jpg', 'JPEG', 'jpeg', 'PNG', 'png', 'GIF', 'gif' )
+					WHERE fb.sort = '1' AND fb.module = 'p_event_main' ) f ON f.bus_id = pw.uuid 
+			LEFT JOIN p_illegal i1 ON i1.uuid = pe.illegal_id 
+			LEFT JOIN p_illegal i2 ON i2.uuid = pe.illegal_id 
+			
+		WHERE
+			pe.STATUS = '2' 
+		<if test="p.dataStatus != null and p.dataStatus != ''">
+			AND b.data_status = #{p.dataStatus}
+		</if>
+		<if test="p.uuid != null and p.uuid != ''">
+			AND b.uuid = #{p.uuid}
+		</if>
+		<if test="p.name != null and p.name != ''">
+			AND b.name like CONCAT('%', #{p.name}, '%')
+		</if>
+		 group by b.uuid ,f.fileId,f.path,pw.create_time, pe.status ,pe.uuid ,pe.create_time 
+		  order by warningTime is null,warningTime desc
+	</select>
+	<select id="getBuildingAddrList" resultType="map">
+		SELECT
+		g.uuid,
+		ab.center,
+		ab.polyline
+		FROM
+		cle_address_base ab
+		LEFT JOIN cle_grid g
+		ON g.ab_id = ab.uuid
+		AND ab.data_status = '1'
+		WHERE IFNULL(ab.polyline, 0) = ab.polyline
+		AND ab.polyline <![CDATA[<>]]>
+		''
+		<if test="p.dataStatus != null and p.dataStatus != ''">
+			AND g.data_status = #{p.dataStatus}
+		</if>
+		<if test="p.uuid != null and p.uuid != ''">
+			AND g.uuid = #{p.uuid}
+		</if>
+		<if test="p.gname != null and p.gname != ''">
+			AND g.gname like CONCAT('%', #{p.gname}, '%')
+		</if>
+	</select>
+
+	<select id="areaData" resultType="java.util.LinkedHashMap">
+		SELECT
+		IFNULL(f.districtCount,0) as districtCount,
+		e.`name`
+		FROM
+		cb_regions e
+		LEFT JOIN (
+		SELECT
+		a.district,
+		COUNT(a.district) AS districtCount
+		FROM
+		(
+		SELECT
+		b.district
+		FROM
+		cle_address_base b,
+		cle_grid g
+		WHERE
+		b.data_status = '1'
+		AND g.ab_id = b.uuid
+		AND g.data_status = '1'
+		AND b.district IN (
+		SELECT
+		c.`code`
+		FROM
+		cb_regions c
+		WHERE
+		c.parent = '440300000000'
+		)
+		) a
+		GROUP BY
+		a.district
+		) f ON f.district = e.`code`
+		WHERE
+		e.parent = '440300000000'
+		AND e.`code` != '440301000000'
+	</select>
+	
+	<select id="getNearbyBuilding" resultType="Map" parameterType="Map">
+		SELECT
+			pb.uuid,
+			pb.name,
+			pb.code,
+			pb.address,
+			pb.abs_id,
+			ab.center,
+			ab.polyline 
+		FROM
+			p_building pb,
+			cle_address_base ab,
+			cle_dept_grid dg 
+		WHERE
+			pb.data_status=1
+			AND pb.abs_id = ab.uuid
+			AND pb.uuid = dg.grid_id 
+			<if test="deptId != null and deptId !=''">
+			AND dg.dept_id = #{deptId}
+			</if>
+			AND LEFT ( ab.center, LOCATE( ',', ab.center ) - 1 ) &gt;= (#{lon} - #{radius}) 
+			AND LEFT ( ab.center, LOCATE( ',', ab.center ) - 1 ) &lt;= (#{lon} + #{radius}) 
+			AND substring( ab.center, LOCATE( ',', ab.center ) + 1 ) &gt;= (#{lat} - #{radius}) 
+			AND substring( ab.center, LOCATE( ',', ab.center ) + 1 ) &lt;= (#{lat} + #{radius})
+	</select>
+	
+	
+	<select id="getBuildingAddrPolicy" resultType="Map" parameterType="Map">
+		SELECT
+			pb.uuid,
+			ab.center,
+			pb.name,
+			pb.abs_id,
+			ab.polyline, 
+			ab.atype
+		FROM
+			p_building pb   
+			LEFT JOIN cle_address_base ab ON pb.abs_id = ab.uuid 
+		AND ab.data_status = '1' 
+			right join cle_dept_grid dg on dg.grid_id = pb.uuid 
+		WHERE
+			pb.data_status=1
+			AND pb.abs_id = ab.uuid 
+			AND ab.atype = 'p_building' 
+			AND ab.center is not null and ab.polyline is not null 
+			AND SUBSTRING_INDEX(ab.center, ',', 1) &gt;= #{p.minLng}
+			AND SUBSTRING_INDEX(ab.center, ',', 1) &lt;= #{p.maxLng}
+			AND SUBSTRING_INDEX(ab.center, ',', -1) &gt;= #{p.minLat}
+			AND SUBSTRING_INDEX(ab.center, ',', -1) &lt;= #{p.maxLat}
+				<if test="p.deptId != null and p.deptId != ''">
+					AND dg.dept_id = #{p.deptId}
+				</if>
+	</select>
+	
+	<select id="getBuildAddr" resultMap="voAddressBaseResultMap">
+		SELECT
+			b.*, ab.uuid AS ab_uuid,
+			ab.atype AS ab_atype,
+			cr. NAME AS ab_province_name,
+			cs. NAME AS ab_city_name,
+			ce. NAME AS ab_district_name,
+			cg. NAME AS ab_street_name,
+			ab.address AS ab_address,
+			ab.center AS ab_center,
+			ab.polyline AS ab_polyline,
+			ab.data_status AS ab_data_status
+		FROM
+			p_building b
+		LEFT JOIN cle_address_base ab ON b.abs_id = ab.uuid
+		LEFT JOIN cb_regions cr ON cr. CODE = ab.province
+		LEFT JOIN cb_regions cs ON cs. CODE = ab.city
+		LEFT JOIN cb_regions ce ON ce. CODE = ab.district
+		LEFT JOIN cb_regions cg ON cg. CODE = ab.street
+		LEFT JOIN cle_dept_grid g ON g.grid_id = b.uuid
+		WHERE
+			1 = 1
+		AND b.data_status = 1
+		AND g.uuid IS NOT NULL
+        <if test="p.deptId != null and p.deptId != ''">
+          AND g.dept_id =#{p.deptId} 
+        </if>
+		<if test="p.uuid != null and p.uuid != ''">
+			AND b.uuid = #{p.uuid}
+		</if>
+		<if test="p.name != null and p.name != ''">
+			AND b.name like CONCAT('%', #{p.name}, '%')
+		</if>
+	</select>
+	
+	<select id="getImgListByBusId" resultType="HashMap">
+		SELECT
+	        uf.uuid as fileId,
+			uf.origin_name as name,
+			CONCAT('/aiuas/api/file/ioimage?fileId=', fb.file_id) AS url
+		FROM
+			cb_file_bus fb
+			LEFT JOIN cb_upload_file uf ON uf.uuid = fb.file_id 
+			AND uf.data_status = '1' 
+		WHERE
+			fb.data_status = '1' 
+			and fb.module=#{module}
+			AND fb.bus_id = #{busId}
+			order by uf.operate_time desc
+	</select>
+</mapper>

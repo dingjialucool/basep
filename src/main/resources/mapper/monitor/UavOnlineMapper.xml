@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chinobot.plep.home.monitor.mapper.UavOnlineMapper">
+	
+	<select id="uavList" resultType="map">
+		SELECT
+			pu.*,
+			f.fileId,
+			ua.size,
+			ua.etype,
+			ua.size,
+			ua.ename,
+			ua.running_time As runTime,
+			ua.param,
+			ua.run_status as runStatus
+		FROM
+			p_uav_online pu
+		LEFT JOIN cle_uav ua ON ua.ecode = pu.uav_code
+		LEFT JOIN (
+			SELECT
+				uf.uuid AS fileId,
+				uf.path,
+				fb.bus_id
+			FROM
+				cb_upload_file uf
+			LEFT JOIN cb_file_bus fb ON uf.uuid = fb.file_id
+			WHERE
+				fb.sort = '1'
+			AND fb.module = 'equipment_album'
+		) f ON f.bus_id = ua.uuid
+		WHERE 
+			ua.data_status = '1'
+		<if test="p.ename != null and p.ename != ''">
+          AND ua.ename like CONCAT('%', #{p.ename}, '%')
+        </if>
+        <if test="p.runStatus != null and p.runStatus != ''">
+          AND pu.run_status = #{p.runStatus}
+        </if>
+        <if test="p.uavType != null and p.uavType != ''">
+          AND ua.etype = #{p.uavType}
+        </if>
+        <if test="p.uuid != null and p.uuid != ''">
+          AND pu.uuid = #{p.uuid}
+        </if>
+	</select>
+	
+	<select id="getUavOnlines" resultType="com.chinobot.plep.home.monitor.entity.UavOnline">
+		SELECT
+			*
+		FROM
+			p_uav_online
+		WHERE
+			uav_code IS NOT NULL
+		AND flight_speed IS NOT NULL
+		AND flying_height IS NOT NULL
+		AND run_status = '1'
+	</select>
+	
+</mapper>
